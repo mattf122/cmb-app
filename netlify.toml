@@ -1,9 +1,1 @@
-[build]
-  command = "echo 'Build complete'"
-  functions = "netlify/functions"
-  publish = "."
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Cache-Control = "no-cache"
