@@ -215,13 +215,14 @@ async function runGenerateEstimate(){
     const zoneList = zones.map(z =>
       `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
     ).join("\n");
-    const system = "You are a residential and commercial construction estimator in Northwest Montana (Flathead Valley). Respond ONLY with a valid JSON object. No markdown, no explanation. Start with { end with }.";
-    const prompt = `Generate a conceptual budget estimate for this Montana construction project.
+    const system = "You are an expert residential and commercial construction estimator in Northwest Montana (Flathead Valley / Kalispell) with 30 years experience. PRICING RULES: 1) Base all costs on 2026 Montana market rates. 2) Add General Conditions to EVERY estimate scaled to project size using 1 month duration per $50k of base cost, including: dumpster/debris removal, project management monthly fee, accounting/bookkeeping, permits and inspections, temporary facilities, builder risk insurance, site supervision/superintendent. 3) Apply 20% overhead and profit to ALL costs including general conditions. 4) LOW range = lean execution. HIGH range = includes upgrades and contingency. 5) Respond ONLY with valid JSON. No markdown. Start with { end with }.";
+    const prompt = `Generate a conceptual budget estimate for this Montana construction project. Apply 1 month duration per $50k of base cost for general conditions.
+
 Zones: ${zoneList}
 Notes: ${appData.projectNotes||"none"}
 
-Return ONLY this JSON:
-{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"totalLow":0,"totalHigh":0,"summary":"string","sections":[{"name":"trade name","low":0,"high":0}]}`;
+Return ONLY this JSON with real 2026 Montana dollar amounts (no markdown, no backticks):
+{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"trade name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Dumpster/Debris Removal","low":0,"high":0},{"name":"Project Management","low":0,"high":0},{"name":"Accounting/Bookkeeping","low":0,"high":0},{"name":"Permits & Inspections","low":0,"high":0},{"name":"Temporary Facilities","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Site Supervision","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string"}`;
     const raw = await callClaude(prompt, system);
     const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
     if(start===-1) throw new Error("No JSON returned");
@@ -463,6 +464,19 @@ function renderEstimate(){
         <div class="estimate-row"><span style="font-size:13px;color:var(--cream-dk);">${esc(s.name)}</span><span style="font-size:13px;color:var(--cream);">${fmt$(s.low)} – ${fmt$(s.high)}</span></div>
       `).join("")}
     </div>`:""}
+    ${est.generalConditions?`
+    <div class="card">
+      <div class="section-title">General Conditions (${est.generalConditions.months||1} month${(est.generalConditions.months||1)>1?"s":""})</div>
+      ${(est.generalConditions.items||[]).map(item=>`
+        <div class="estimate-row"><span style="font-size:13px;color:var(--cream-dk);">${esc(item.name)}</span><span style="font-size:13px;color:var(--cream);">${fmt$(item.low)} – ${fmt$(item.high)}</span></div>
+      `).join("")}
+      <div class="estimate-row" style="border:none;"><span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Subtotal</span><span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.generalConditions.low)} – ${fmt$(est.generalConditions.high)}</span></div>
+    </div>`:""}
+    ${est.subtotalLow?`
+    <div class="card" style="border-color:rgba(201,168,76,0.3);">
+      <div class="estimate-row"><span style="font-size:13px;color:var(--stone-light);">Subtotal (before margin)</span><span style="font-size:13px;color:var(--cream-dk);">${fmt$(est.subtotalLow)} – ${fmt$(est.subtotalHigh)}</span></div>
+      <div class="estimate-row"><span style="font-size:13px;color:var(--stone-light);">Overhead & Profit (20%)</span><span style="font-size:13px;color:var(--copper-lt);">${fmt$(est.overheadProfitLow)} – ${fmt$(est.overheadProfitHigh)}</span></div>
+    </div>`:""}
     <div class="card">
       <div class="field">
         <label class="field-label">Design Retainer Amount ($)</label>
@@ -529,9 +543,45 @@ function renderReview(){
     </div>
     <div class="card" style="border-color:rgba(184,115,51,0.4);">
       <div class="section-title">Design-Build Agreement</div>
-      <p style="font-size:12px;color:var(--cream-dk);line-height:1.8;margin-bottom:12px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your project. This Agreement covers professional preconstruction design services through our 5-Step Design-Build Program (Steps 1–4). Step 5 (construction) is under a separate contract. We have first right of refusal to build your project.</p>
-      <div class="estimate-row"><span style="font-size:12px;color:var(--stone-light);">Non-Refundable Retainer</span><span style="font-size:14px;color:var(--gold);font-weight:bold;">${fmt$(d.retainerAmount||0)}</span></div>
-      <p style="font-size:11px;color:var(--stone-light);line-height:1.8;margin-top:10px;margin-bottom:16px;">Rates: Principal/GM $250/hr · Architectural $250/hr · Interior/Exterior Designer $150/hr. Payment due within 10 days. Late payments: 1.5%/month. Termination: 14 days notice + 10% fee (min $5,000). Montana law governs. Disputes: mediation then Flathead County District Court.</p>
+      <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;margin-bottom:16px;max-height:400px;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
+        <p style="margin-bottom:12px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">1. What We Will Do for You</p>
+        <p style="margin-bottom:8px;">We will provide professional preconstruction design services using our proven <strong>5-Step Design-Build Program</strong> (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (construction) is handled under a separate full construction contract. We have the first right of refusal to build your project.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">2. Your Investment (Compensation)</p>
+        <p style="margin-bottom:4px;">Hourly rates include a 20% markup for overhead and management:</p>
+        <p style="margin-bottom:8px;">· Principal / General Management: <strong>$250.00/hr</strong><br/>· Architectural Design Services: <strong>$250.00/hr</strong><br/>· Consultants / Specialty Engineering: <strong>$250.00/hr</strong><br/>· Interior/Exterior Designer: <strong>$150.00/hr</strong></p>
+        <p style="margin-bottom:8px;"><strong>Initial Non-Refundable Retainer:</strong> ${fmt$(d.retainerAmount||0)} — payable when you sign and applied to your first invoice(s). Invoices are sent monthly or at phase milestones. Payment is due within <strong>10 calendar days</strong>. Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law). Final design documents are released only after all outstanding amounts are paid in full.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">3. How Long This Lasts &amp; What Happens if We Stop Early</p>
+        <p style="margin-bottom:8px;">This Agreement begins on the date signed and continues until we complete Steps 1–4, or until one of us ends it with <strong>14 days written notice</strong>. If the Agreement ends early: you pay for all work completed and expenses incurred; you pay a <strong>Termination Fee</strong> of 10% of the estimated construction cost (minimum $5,000); all design materials must be returned or destroyed. If you later use our designs with another contractor without written permission and full payment, you owe a <strong>Design Licensing Fee</strong> equal to <strong>200% of total design fees</strong> paid or estimated.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">4. Who Owns the Designs</p>
+        <p style="margin-bottom:8px;">All drawings, renderings, plans, and materials we create belong entirely to us and are protected by copyright law. You receive no right to copy, modify, or use the designs for construction until: (a) you have paid all fees in full, AND (b) you have signed the full construction contract with us OR paid the Design Licensing Fee. Unauthorized use is copyright infringement. We may file a mechanic's lien on your property for any unpaid amounts.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">5. Our Promises to You</p>
+        <p style="margin-bottom:8px;">· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">6. Your Protections</p>
+        <p style="margin-bottom:8px;">· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">7. How We Communicate</p>
+        <p style="margin-bottom:8px;">All notices must be in writing. Our address: Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903. Notices are considered delivered when personally handed, two days after registered mail, or the next business day after overnight courier.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">8. Other Important Information</p>
+        <p style="margin-bottom:8px;">· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Time is important — we will both work to keep your project moving.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit A — 5-Step Design-Build Program</p>
+        <p style="margin-bottom:4px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration. Your Assignment: Floor plan + material selection; we explain Buildertrend.</p>
+        <p style="margin-bottom:4px;"><strong>STEP 2 – Schematic Design:</strong> Early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans. Your Assignment: Interior selections (cabinetry, fixtures, trim, doors/windows).</p>
+        <p style="margin-bottom:4px;"><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans signed off and sent to engineering.</p>
+        <p style="margin-bottom:4px;"><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs. All trade bids finalized.</p>
+        <p style="margin-bottom:8px;"><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit B — Insurance &amp; Montana Disclosures</p>
+        <p style="margin-bottom:8px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law. Montana Residential Construction Disclosures: We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract). Full insurance certificates and additional disclosures are available upon request.</p>
+      </div>
       <div class="divider"></div>
       ${sigBlock("sig_client","clientSig","Client Signature")}
       <div class="row2">
@@ -590,7 +640,18 @@ function renderPrintDoc(){
         <span style="font-size:13px;color:#555;">Design Retainer (Non-Refundable)</span>
         <span style="font-size:14px;font-weight:bold;color:#b87333;">${fmt$(d.retainerAmount||0)}</span>
       </div>
-      <p style="font-size:11px;color:#888;font-style:italic;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
+      ${est.generalConditions?`
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">General Conditions (${est.generalConditions.months||1} Month${(est.generalConditions.months||1)>1?"s":""})</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <tbody>${(est.generalConditions.items||[]).map(item=>`<tr style="border-bottom:1px solid #f0ebe0;"><td style="padding:5px 8px;">${esc(item.name)}</td><td style="padding:5px 8px;text-align:right;">${fmt$(item.low)}</td><td style="padding:5px 8px;text-align:right;">${fmt$(item.high)}</td></tr>`).join("")}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;padding:8px 12px;background:#faf7f2;border-radius:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span style="color:#555;">Subtotal (before O&P)</span><span>${fmt$(est.subtotalLow)} – ${fmt$(est.subtotalHigh)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#b87333;"><span>Overhead & Profit (20%) — Internal</span><span>${fmt$(est.overheadProfitLow)} – ${fmt$(est.overheadProfitHigh)}</span></div>
+      </div>`:""}
+      <p style="font-size:11px;color:#888;font-style:italic;margin-top:10px;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
     </div>`:""}
     ${(d.zones||[]).map(z=>`<div style="margin-bottom:20px;page-break-inside:avoid;">
       <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">${esc(z.type)} — ${esc(z.finish)} Finish</div>
@@ -599,8 +660,43 @@ function renderPrintDoc(){
     </div>`).join("")}
     <div style="border-top:2px solid #b87333;padding-top:24px;margin-top:24px;">
       <div style="font-size:14px;font-weight:bold;margin-bottom:12px;">Design-Build Agreement</div>
-      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:12px;">Thank you for choosing <strong>Copper Mountain Builders</strong> for your project in the Flathead Valley. This Agreement covers professional preconstruction design services through our 5-Step Design-Build Program (Steps 1–4). Step 5 (construction) is handled under a separate contract. We have first right of refusal to build your project.</p>
-      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:20px;"><strong>Rates:</strong> Principal/GM $250/hr · Architectural Design $250/hr · Interior/Exterior Designer $150/hr. Payment due within 10 calendar days. Late payments: 1.5%/month. Termination: 14 days written notice + 10% fee (min $5,000). All designs remain property of Copper Mountain Builders until fees paid and construction contract signed. Montana law governs. Disputes: mediation then Flathead County District Court.</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:16px;">Thank you for choosing <strong>Copper Mountain Builders</strong> for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">1. What We Will Do for You</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">We will provide professional preconstruction design services using our proven 5-Step Design-Build Program (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (actual construction and post-build support) is handled under a separate full construction contract that we will present when the design is complete. We have the first right of refusal to build your project. We include two client meetings per phase in Steps 1–3 and all coordination of surveys, engineering, renderings, and bidding packages.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">2. Your Investment (Compensation)</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:4px;">We charge a clear hourly rate that includes a 20% markup for overhead and management:</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">· Principal / General Management: $250.00 per hour<br/>· Architectural Design Services: $250.00 per hour<br/>· Consultants / Specialty Engineering: $250.00 per hour<br/>· Interior/Exterior Designer: $150.00 per hour</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;"><strong>Initial Non-Refundable Retainer: ${fmt$(d.retainerAmount||0)}</strong> — payable when you sign and applied to your first invoice(s). Invoices are sent monthly or at phase milestones. Payment is due within 10 calendar days. Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law). Final design documents are released only after all outstanding amounts are paid in full.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">3. How Long This Lasts &amp; What Happens if We Stop Early</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">This Agreement begins on the date signed and continues until we complete Steps 1–4, or until one of us ends it with 14 days written notice. If the Agreement ends early: you pay for all work completed and expenses incurred; you pay a Termination Fee of 10% of the estimated construction cost (minimum $5,000); all design materials must be returned or destroyed. If you later use our designs with another contractor without written permission and full payment, you owe a Design Licensing Fee equal to 200% of total design fees paid or estimated.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">4. Who Owns the Designs</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">All drawings, renderings, plans, and other materials we create belong entirely to us and are protected by copyright law. You receive no right to copy, modify, or use the designs for construction until: (a) you have paid all fees in full, AND (b) you have signed the full construction contract with us OR paid the Design Licensing Fee. Unauthorized use is copyright infringement. We may also file a mechanic's lien on your property for any unpaid amounts as allowed by Montana law.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">5. Our Promises to You</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">6. Your Protections</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">7. How We Communicate</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;">All notices must be in writing and sent to: You at your address above; Us at Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903. Notices are considered delivered when personally handed, two days after registered mail, or the next business day after overnight courier.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">8. Other Important Information</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:16px;">· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Time is important — we will both work to keep your project moving.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">Exhibit A — Our 5-Step Design-Build Program</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration. Your Assignment: Floor plan + material selection; we explain Buildertrend.</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;"><strong>STEP 2 – Schematic Design:</strong> Early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans and apply changes. Your Assignment: Interior selections (cabinetry, fixtures, trim, doors/windows).</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;"><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans are signed off and sent to engineering.</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:8px;"><strong>STEP 4 – Project Development:</strong> We prepare budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs. All trade bids are finalized.</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:16px;"><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
+
+      <p style="font-size:11px;font-weight:bold;color:#b87333;letter-spacing:2px;text-transform:uppercase;margin:14px 0 6px 0;">Exhibit B — Insurance &amp; Montana Disclosures</p>
+      <p style="font-size:12px;color:#444;line-height:1.8;margin-bottom:20px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law. Montana Residential Construction Disclosures: We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract). Full insurance certificates and additional disclosures are available upon request.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;">
         <div>
           <div style="font-size:11px;color:#b87333;margin-bottom:4px;letter-spacing:2px;text-transform:uppercase;">Client Signature</div>
