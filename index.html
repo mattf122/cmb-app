@@ -257,6 +257,59 @@ async function runGenerateConcepts(){
   }
 }
 
+// ── Image Generation (Pollinations.ai — free, no API key) ─────────────────
+function buildImagePrompt(zone){
+  const finishMap = {
+    "Essential": "clean modern finishes, quality materials, functional design",
+    "Designer": "high-end finishes, custom details, elevated design, designer fixtures",
+    "Luxury": "luxury finishes, bespoke custom millwork, top-of-market materials, premium everything"
+  };
+  const finish = finishMap[zone.finish] || finishMap["Designer"];
+  const notes = zone.notes ? `, ${zone.notes}` : "";
+  return `photorealistic interior rendering of a beautifully renovated ${zone.type} in a Montana home, ${finish}${notes}, professional architectural photography, bright natural light, warm inviting atmosphere, high resolution`;
+}
+
+async function generateConceptImage(zone){
+  const prompt = encodeURIComponent(buildImagePrompt(zone));
+  const negPrompt = encodeURIComponent("ugly, blurry, low quality, distorted, dark, dirty, cluttered, construction mess");
+  const seed = Math.floor(Math.random() * 999999);
+  const url = `https://image.pollinations.ai/prompt/${prompt}?negative=${negPrompt}&width=768&height=512&seed=${seed}&nologo=true&enhance=true`;
+  return url;
+}
+
+async function runGenerateImages(){
+  const btn = document.getElementById("img-gen-btn");
+  const err = document.getElementById("img-gen-error");
+  const status = document.getElementById("img-gen-status");
+  btn.disabled = true;
+  err.classList.add("hidden");
+
+  for(let i = 0; i < appData.zones.length; i++){
+    const zone = appData.zones[i];
+    status.textContent = `Generating image ${i+1} of ${appData.zones.length}…`;
+    try {
+      const imgUrl = await generateConceptImage(zone);
+      // Pre-load the image to confirm it works
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imgUrl;
+        setTimeout(reject, 30000); // 30s timeout
+      });
+      if(!appData.conceptImages) appData.conceptImages = {};
+      appData.conceptImages[zone.id] = imgUrl;
+    } catch(e){
+      console.error("Image gen failed for zone", zone.id, e);
+    }
+  }
+
+  status.textContent = "";
+  btn.disabled = false;
+  btn.textContent = "↻ Regenerate Images";
+  render();
+}
+
 // ── Voice to text ────────────────────────────────────────────────────
 let recognition = null;
 let activeVoiceField = null;
@@ -517,10 +570,27 @@ function renderConcepts(){
         <div style="color:var(--copper);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${esc(z.type)} — ${esc(z.finish)}</div>
         ${concepts[z.id]?`
           <textarea style="min-height:90px;" oninput="appData.concepts['${z.id}']=this.value">${esc(concepts[z.id])}</textarea>
+          ${appData.conceptImages&&appData.conceptImages[z.id]?`
+            <div style="margin-top:12px;">
+              <label class="field-label">AI Concept Rendering</label>
+              <img src="${appData.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);" alt="Concept rendering"/>
+            </div>
+          `:""}
           ${z.photosInspo&&z.photosInspo.length?`<div class="img-row" style="margin-top:8px;">${z.photosInspo.map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
-        `:`<p style="color:var(--stone-light);font-size:13px;font-style:italic;">Tap Generate above</p>`}
+        `:`<p style="color:var(--stone-light);font-size:13px;font-style:italic;">Tap Generate Concepts above first</p>`}
       </div>
     `).join("")}
+
+    ${hasAll?`
+    <div class="card-copper">
+      <div class="section-title">AI Concept Images</div>
+      <p style="font-size:13px;color:var(--cream-dk);line-height:1.7;margin-bottom:14px;">Generate a photorealistic concept rendering for each zone. These appear in the printed proposal alongside the design description.</p>
+      <div id="img-gen-error" class="error-msg hidden"></div>
+      <p id="img-gen-status" style="font-size:13px;color:var(--gold);margin-bottom:10px;min-height:20px;"></p>
+      <button class="btn-secondary" id="img-gen-btn" onclick="runGenerateImages()">✦ Generate Concept Images</button>
+    </div>
+    `:""}
+
     <button class="btn-primary" ${hasAll?"":`disabled style="opacity:0.5"`} onclick="${hasAll?"goTo(4)":"alert('Generate concepts first')"}">Next: Review & Sign →</button>
     <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
@@ -550,7 +620,14 @@ function renderReview(){
     </div>`:""}
     <div class="card">
       <div class="section-title">Zone Concepts</div>
-      ${(d.zones||[]).map(z=>`<div style="margin-bottom:14px;"><div style="color:var(--copper);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">${esc(z.type)}</div>${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:var(--cream-dk);line-height:1.8;">${esc(d.concepts[z.id])}</p>`:""}</div>`).join("")}
+      ${(d.zones||[]).map(z=>`
+        <div style="margin-bottom:20px;">
+          <div style="color:var(--copper);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${esc(z.type)} — ${esc(z.finish)}</div>
+          ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:var(--cream-dk);line-height:1.8;margin-bottom:8px;">${esc(d.concepts[z.id])}</p>`:""}
+          ${d.conceptImages&&d.conceptImages[z.id]?`<img src="${d.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);margin-bottom:6px;" alt="Concept"/>`:""}
+          ${z.photosInspo&&z.photosInspo.length?`<div class="img-row">${z.photosInspo.slice(0,2).map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
+        </div>
+      `).join("")}
     </div>
     <div class="card" style="border-color:rgba(184,115,51,0.4);">
       <div class="section-title">Design-Build Agreement</div>
@@ -664,10 +741,21 @@ function renderPrintDoc(){
       </div>`:""}
       <p style="font-size:11px;color:#888;font-style:italic;margin-top:10px;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
     </div>`:""}
-    ${(d.zones||[]).map(z=>`<div style="margin-bottom:20px;page-break-inside:avoid;">
+    ${(d.zones||[]).map(z=>`<div style="margin-bottom:24px;page-break-inside:avoid;">
       <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">${esc(z.type)} — ${esc(z.finish)} Finish</div>
-      ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:#444;line-height:1.8;margin-bottom:10px;">${esc(d.concepts[z.id])}</p>`:""}
-      ${z.photosInspo&&z.photosInspo.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;">${z.photosInspo.slice(0,3).map(s=>`<img src="${s}" style="width:120px;height:120px;object-fit:cover;border-radius:6px;" alt=""/>`).join("")}</div>`:""}
+      ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:#444;line-height:1.8;margin-bottom:12px;">${esc(d.concepts[z.id])}</p>`:""}
+      ${d.conceptImages&&d.conceptImages[z.id]?`
+        <div style="margin-bottom:12px;">
+          <img src="${d.conceptImages[z.id]}" style="width:100%;max-height:280px;object-fit:cover;border-radius:8px;border:1px solid #e0d0b0;" alt="AI Concept Rendering"/>
+          <p style="font-size:10px;color:#aaa;margin-top:4px;font-style:italic;">AI-generated conceptual rendering — for visualization purposes only</p>
+        </div>
+      `:""}
+      ${z.photosInspo&&z.photosInspo.length?`
+        <div>
+          <p style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#b87333;margin-bottom:6px;">Client Inspiration</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">${z.photosInspo.slice(0,3).map(s=>`<img src="${s}" style="width:110px;height:110px;object-fit:cover;border-radius:6px;" alt=""/>`).join("")}</div>
+        </div>
+      `:""}
     </div>`).join("")}
     <div style="border-top:2px solid #b87333;padding-top:24px;margin-top:24px;">
       <div style="font-size:14px;font-weight:bold;margin-bottom:12px;">Design-Build Agreement</div>
