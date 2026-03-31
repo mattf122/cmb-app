@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>Copper Mountain - Site Visit</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; background: #2c2a27; color: #f5f0e8; min-height: 100vh; }
+.app { min-height: 100vh; background: #2c2a27; }
+.header { background: linear-gradient(135deg, #3d3a35 0%, #2c2a27 100%); border-bottom: 2px solid #b87333; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.logo { font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: #b87333; font-weight: bold; }
+.step-badge { background: #b87333; color: #fff; border-radius: 20px; padding: 4px 14px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+.progress { height: 3px; background: #5c5850; border-radius: 2px; margin-bottom: 0; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #b87333, #c9a84c); border-radius: 2px; transition: width 0.4s ease; }
+.page { padding: 20px 16px; max-width: 600px; margin: 0 auto; }
+.card { background: #3d3a35; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #5c5850; }
+.card-copper { background: linear-gradient(135deg, #8a552022, #3d3a35); border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #b8733344; }
+.label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #d4956a; margin-bottom: 6px; display: block; }
+.input, .textarea, .select { width: 100%; background: #2c2a27; border: 1px solid #5c5850; border-radius: 8px; padding: 12px 14px; color: #f5f0e8; font-size: 15px; font-family: Georgia, serif; box-sizing: border-box; outline: none; margin-bottom: 12px; }
+.input:focus, .textarea:focus, .select:focus { border-color: #b87333 !important; box-shadow: 0 0 0 2px #b8733322; }
+.btn-primary { background: linear-gradient(135deg, #b87333, #8a5520); color: #fff; border: none; border-radius: 10px; padding: 15px 28px; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: Georgia, serif; width: 100%; font-weight: bold; box-shadow: 0 4px 20px #b8733344; }
+.btn-secondary { background: transparent; color: #b87333; border: 1.5px solid #b87333; border-radius: 10px; padding: 12px 24px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: Georgia, serif; width: 100%; }
+.section-title { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #b87333; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #b8733333; }
+.zone-card { background: #2c2a27; border-radius: 10px; padding: 16px; margin-bottom: 12px; border: 1px solid #b8733333; }
+.ai-box { background: #2c2a27; border-radius: 10px; padding: 16px; margin-top: 12px; border: 1px solid #c9a84c44; }
+.big-num { font-size: 22px; font-weight: bold; color: #c9a84c; }
+.estimate-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #5c585033; }
+@media print {
+body > * { display: none !important; }
+#print-area { display: block !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+<div class="logo">⬡ COPPER MOUNTAIN</div>
+<div class="step-badge" id="step-badge">CLIENT</div>
+<button onclick="openSettings()" style="background: none; border: none; color: #b87333; font-size: 20px; cursor: pointer;">⚙</button>
+</div>
+
+<div class="progress">
+<div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+</div>
+
+<div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; padding: 20px;">
+<div style="background: #3d3a35; border-radius: 12px; padding: 20px; max-width: 400px; margin: 50px auto; color: #f5f0e8;">
+<h2 style="margin-bottom: 16px; color: #b87333;">API Settings</h2>
+<label class="label">Anthropic API Key</label>
+<input type="password" id="api-key-input" class="input" placeholder="sk-ant-..."/>
+<p style="font-size: 11px; color: #5c5850; margin-top: 6px;">Get your key at console.anthropic.com</p>
+<button onclick="saveApiKey()" class="btn-primary" style="margin-top: 16px;">Save Key</button>
+<button onclick="closeSettings()" class="btn-secondary" style="margin-top: 8px;">Close</button>
+</div>
+</div>
+
+<div id="content"></div>
+<div style="height: 40px;"></div>
+</div>
+
+<div id="print-area" style="display: none;"></div>
+
+<script>
+let apiKey = localStorage.getItem("cmb_api_key") || "";
+let currentStep = 0;
+let appData = { zones: [] };
+
+function saveApiKey() {
+const input = document.getElementById("api-key-input").value;
+if(!input.trim()) { alert("Please enter an API key"); return; }
+apiKey = input;
+localStorage.setItem("cmb_api_key", apiKey);
+closeSettings();
+alert("API key saved!");
+}
+
+function openSettings() {
+document.getElementById("api-key-input").value = apiKey;
+document.getElementById("settings-modal").style.display = "block";
+}
+
+function closeSettings() {
+document.getElementById("settings-modal").style.display = "none";
+}
+
+async function callClaude(prompt, system) {
+if(!apiKey) throw new Error("No API key set");
+const proxyUrl = "https://corsproxy.io/?url=" + encodeURIComponent("https://api.anthropic.com/v1/messages");
+const res = await fetch(proxyUrl, {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+"x-api-key": apiKey,
+"anthropic-version": "2023-06-01"
+},
+body: JSON.stringify({
+model: "claude-haiku-4-5-20251001",
+max_tokens: 1500,
+system: system,
+messages: [{ role: "user", content: prompt }]
+})
+});
+const data = await res.json();
+if(data.error) throw new Error(data.error.message);
+if(!data.content || !data.content[0]) throw new Error("Empty response");
+return data.content[0].text;
+}
+
+function render() {
+const pct = (currentStep / 4) * 100;
+document.getElementById("progress-fill").style.width = pct + "%";
+const steps = ["Client", "Scope", "Estimate", "Concepts", "Review & Sign"];
+document.getElementById("step-badge").textContent = steps[currentStep];
+
+let html = "";
+
+if(currentStep === 0) {
+html = `
+<div class="page">
+<div class="card-copper">
+<div class="section-title">Client Information</div>
+<label class="label">Full Legal Name</label>
+<input class="input" placeholder="As it will appear on contract" value="${appData.clientName||''}" onchange="appData.clientName=this.value"/>
+<label class="label">Email</label>
+<input class="input" type="email" value="${appData.clientEmail||''}" onchange="appData.clientEmail=this.value"/>
+<label class="label">Phone</label>
+<input class="input" value="${appData.clientPhone||''}" onchange="appData.clientPhone=this.value"/>
+<label class="label">Mailing Address</label>
+<input class="input" value="${appData.clientAddress||''}" onchange="appData.clientAddress=this.value"/>
+<label class="label">City</label>
+<input class="input" value="${appData.clientCity||''}" onchange="appData.clientCity=this.value"/>
+<label class="label">ZIP</label>
+<input class="input" value="${appData.clientZip||''}" onchange="appData.clientZip=this.value"/>
+<label class="label">Project Address</label>
+<input class="input" value="${appData.projectAddress||''}" onchange="appData.projectAddress=this.value"/>
+<label class="label">Your Name (Rep)</label>
+<input class="input" value="${appData.repName||''}" onchange="appData.repName=this.value"/>
+<label class="label">Company</label>
+<select class="select" onchange="appData.company=this.value">
+<option>Copper Mountain Builders</option>
+<option>CMB Electric</option>
+<option>Ogle Heating and Cooling</option>
+</select>
+<button class="btn-primary" onclick="currentStep=1;render()">Next: Add Project Scope →</button>
+</div>
+</div>
+`;
+}
+
+else if(currentStep === 1) {
+html = `
+<div class="page">
+<div class="card-copper">
+<div class="section-title">Project Zones</div>
+<p style="color: #creamDk; margin-bottom: 16px;">Add each area of work (bathroom, deck, etc.)</p>
+${appData.zones.map((z, i) => `
+<div class="zone-card">
+<div style="font-weight: bold; margin-bottom: 8px;">${z.type} - ${z.sqft} sq ft (${z.finish})</div>
+<div style="font-size: 13px; color: #888;">${z.notes || 'No notes'}</div>
+</div>
+`).join('')}
+<label class="label">Zone Type</label>
+<select id="zone-type" class="select">
+<option>Bathroom Remodel</option>
+<option>Kitchen Remodel</option>
+<option>Laundry Room</option>
+<option>Deck</option>
+<option>Porch Cover</option>
+<option>Addition</option>
+</select>
+<label class="label">Square Footage</label>
+<input id="zone-sqft" class="input" type="number" placeholder="100"/>
+<label class="label">Finish Level</label>
+<select id="zone-finish" class="select">
+<option>Budget</option>
+<option>Mid-Grade</option>
+<option>Luxury</option>
+</select>
+<label class="label">Scope Notes</label>
+<textarea id="zone-notes" class="textarea" placeholder="What specifically needs to be done?"></textarea>
+<button class="btn-primary" onclick="addZone()">+ Add Zone</button>
+<button class="btn-secondary" style="margin-top: 8px;" onclick="currentStep=2;render()">Next: Generate Estimate →</button>
+<button class="btn-secondary" style="margin-top: 8px;" onclick="currentStep=0;render()">← Back</button>
+</div>
+</div>
+`;
+}
+
+else if(currentStep === 2) {
+html = `
+<div class="page">
+<div class="card-copper">
+<div class="section-title">AI Estimate Generation</div>
+<p style="color: #creamDk; margin-bottom: 20px;">Claude will generate a realistic low/high conceptual budget</p>
+<button class="btn-primary" onclick="generateEstimate()">✦ Generate AI Estimate</button>
+<button class="btn-secondary" style="margin-top: 8px;" onclick="currentStep=1;render()">← Back</button>
+</div>
+${appData.estimate ? `
+<div class="card">
+<div class="section-title" style="color: #c9a84c; border-color: #c9a84c44;">Estimate Summary</div>
+<p style="font-size: 14px; line-height: 1.8; color: #f5f0e8; margin-bottom: 16px;">${appData.estimate.summary}</p>
+<div style="display: flex; gap: 16px; margin-bottom: 8px;">
+<div style="flex: 1; text-align: center;">
+<div class="label" style="text-align: center;">Total Low</div>
+<div class="big-num">$${appData.estimate.totalLow.toLocaleString()}</div>
+</div>
+<div style="width: 1px; background: #5c5850;"></div>
+<div style="flex: 1; text-align: center;">
+<div class="label" style="text-align: center;">Total High</div>
+<div class="big-num">$${appData.estimate.totalHigh.toLocaleString()}</div>
+</div>
+</div>
+</div>
+<button class="btn-primary" onclick="currentStep=3;render()">Next: Concept Designs →</button>
+` : ''}
+</div>
+`;
+}
+
+else if(currentStep === 3) {
+html = `
+<div class="page">
+<div class="card-copper">
+<div class="section-title">Concept Descriptions</div>
+<p style="color: #creamDk; margin-bottom: 16px;">Generate design vision for each zone</p>
+<button class="btn-primary" onclick="generateConcepts()">✦ Generate Concepts</button>
+<button class="btn-secondary" style="margin-top:
