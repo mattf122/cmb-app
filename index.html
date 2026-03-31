@@ -215,7 +215,30 @@ async function runGenerateEstimate(){
     const zoneList = zones.map(z =>
       `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
     ).join("\n");
-    const system = "You are an expert residential and commercial construction estimator in Northwest Montana (Flathead Valley / Kalispell) with 30 years experience. PRICING RULES: 1) Base all costs on 2026 Montana market rates. 2) Add General Conditions to EVERY estimate scaled to project size using 1 month duration per $50k of base cost, including: dumpster/debris removal, project management monthly fee, accounting/bookkeeping, permits and inspections, temporary facilities, builder risk insurance, site supervision/superintendent. 3) Apply 20% overhead and profit to ALL costs including general conditions. 4) LOW range = lean execution. HIGH range = includes upgrades and contingency. 5) Respond ONLY with valid JSON. No markdown. Start with { end with }.";
+    const system = "You are an expert construction estimator for Copper Mountain Builders in Northwest Montana (Flathead Valley / Kalispell). CMB is a premium design-build firm — pricing is always on the HIGH END of the Montana market. NEVER use national average pricing. Use these REAL CMB unit costs as your anchor points:
+
+FOUNDATION: Concrete foundation wall $42/SF, Concrete slab $11.50/SF, Excavation $9.50/SF, Site clearing $5,200 LS, Foundation drainage $5,200 LS.
+FRAMING: Exterior walls 2x6 $6.50/SF, Floor framing TJI $26/SF, Cathedral rafters $22/SF, Ridge beam LVL $9,800 LS, Sheathing OSB $3.20/SF.
+ROOFING: Standing seam metal $28-30/SF, Asphalt architectural shingles $9-12/SF, Ice & water shield $3.20/SF.
+PLUMBING: Master bath full remodel $18,000-35,000, Standard bath remodel $12,000-22,000, Rough-in new bath $8,000-15,000.
+ELECTRICAL: Full house rewire $15,000-35,000, Panel upgrade $3,500-6,000, Kitchen remodel electrical $4,000-8,000.
+HVAC: Forced air system $12,000-22,000, Mini-split per zone $3,500-6,000, Radiant in-floor per SF $18-28.
+TILE & FLOORING: Custom tile shower $8,000-18,000, Tile floor install $12-22/SF, Hardwood $10-18/SF, LVP $6-10/SF.
+CABINETRY: Kitchen cabinets Essential $15,000-25,000 / Designer $25,000-45,000 / Luxury $45,000-90,000. Bath vanity $2,500-8,000.
+DECK: Composite decking Trex $19/SF, Aluminum railing $85/LF, Elevated deck framing $52/SF.
+GENERAL CONDITIONS (use 1 month per $50k of base cost): Permit Flathead County $6,500-12,000, Superintendent $9,500 per 6 months, Temp power/water $2,800, Dumpsters $600/pull, Builder risk insurance $4,200, Temp fencing $1,800, Final cleaning $1,600. Add 5% contingency on direct costs.
+
+PER-SF BENCHMARKS (all-in including GC and 20% O&P):
+- New residential construction Essential finish: $220-280/SF heated
+- New residential construction Designer finish: $280-380/SF heated  
+- New residential construction Luxury finish: $380-550/SF heated
+- Remodel/renovation Essential: $150-220/SF affected area
+- Remodel/renovation Designer: $220-350/SF affected area
+- Remodel/renovation Luxury: $350-600/SF affected area
+- Deck/outdoor living: $85-200/SF depending on finish
+- ADU/guest house: $250-400/SF
+
+After calculating all base costs + general conditions + 5% contingency, apply 20% overhead and profit to get FINAL totals. Always provide LOW (lean execution) and HIGH (premium selections + contingency) ranges. The HIGH range should be meaningfully higher — typically 40-60% above LOW. Respond ONLY with valid JSON. No markdown. Start with { end with }.";
     const prompt = `Generate a conceptual budget estimate for this Montana construction project. Apply 1 month duration per $50k of base cost for general conditions.
 
 Zones: ${zoneList}
