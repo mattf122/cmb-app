@@ -215,37 +215,14 @@ async function runGenerateEstimate(){
     const zoneList = zones.map(z =>
       `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
     ).join("\n");
-    const system = "You are an expert construction estimator for Copper Mountain Builders in Northwest Montana (Flathead Valley / Kalispell). CMB is a premium design-build firm — pricing is always on the HIGH END of the Montana market. NEVER use national average pricing. Use these REAL CMB unit costs as your anchor points:
-
-FOUNDATION: Concrete foundation wall $42/SF, Concrete slab $11.50/SF, Excavation $9.50/SF, Site clearing $5,200 LS, Foundation drainage $5,200 LS.
-FRAMING: Exterior walls 2x6 $6.50/SF, Floor framing TJI $26/SF, Cathedral rafters $22/SF, Ridge beam LVL $9,800 LS, Sheathing OSB $3.20/SF.
-ROOFING: Standing seam metal $28-30/SF, Asphalt architectural shingles $9-12/SF, Ice & water shield $3.20/SF.
-PLUMBING: Master bath full remodel $18,000-35,000, Standard bath remodel $12,000-22,000, Rough-in new bath $8,000-15,000.
-ELECTRICAL: Full house rewire $15,000-35,000, Panel upgrade $3,500-6,000, Kitchen remodel electrical $4,000-8,000.
-HVAC: Forced air system $12,000-22,000, Mini-split per zone $3,500-6,000, Radiant in-floor per SF $18-28.
-TILE & FLOORING: Custom tile shower $8,000-18,000, Tile floor install $12-22/SF, Hardwood $10-18/SF, LVP $6-10/SF.
-CABINETRY: Kitchen cabinets Essential $15,000-25,000 / Designer $25,000-45,000 / Luxury $45,000-90,000. Bath vanity $2,500-8,000.
-DECK: Composite decking Trex $19/SF, Aluminum railing $85/LF, Elevated deck framing $52/SF.
-GENERAL CONDITIONS (use 1 month per $50k of base cost): Permit Flathead County $6,500-12,000, Superintendent $9,500 per 6 months, Temp power/water $2,800, Dumpsters $600/pull, Builder risk insurance $4,200, Temp fencing $1,800, Final cleaning $1,600. Add 5% contingency on direct costs.
-
-PER-SF BENCHMARKS (all-in including GC and 20% O&P):
-- New residential construction Essential finish: $220-280/SF heated
-- New residential construction Designer finish: $280-380/SF heated  
-- New residential construction Luxury finish: $380-550/SF heated
-- Remodel/renovation Essential: $150-220/SF affected area
-- Remodel/renovation Designer: $220-350/SF affected area
-- Remodel/renovation Luxury: $350-600/SF affected area
-- Deck/outdoor living: $85-200/SF depending on finish
-- ADU/guest house: $250-400/SF
-
-After calculating all base costs + general conditions + 5% contingency, apply 20% overhead and profit to get FINAL totals. Always provide LOW (lean execution) and HIGH (premium selections + contingency) ranges. The HIGH range should be meaningfully higher — typically 40-60% above LOW. Respond ONLY with valid JSON. No markdown. Start with { end with }.";
-    const prompt = `Generate a conceptual budget estimate for this Montana construction project. Apply 1 month duration per $50k of base cost for general conditions.
+    const system = "You are the estimating brain for Copper Mountain Builders — a premium design-build GC in Flathead Valley, Montana. You think and estimate exactly like a 30-year licensed Montana general contractor who knows code inside and out. NEVER use national average pricing. CMB is high-end. Always price accordingly.\n\nCONTRACTOR LOGIC AND CODE COMPLIANCE — apply automatically:\n\nUNIVERSAL: All work complies with IRC 2021 (Montana adopted). Flathead County permit required for: structural work, additions, new construction, decks over 200 SF or 30 inches above grade, electrical panel work, new plumbing rough-in. Structural engineering stamp required for: wall removal affecting load path, new roof structures, additions, spans over 20 feet. Energy code: walls R-21 min, ceilings R-49, floors R-30, windows U-0.30 or better. Egress: bedroom windows min 5.7 SF opening. Electrical: AFCI all living areas, GFCI all wet locations. Plumbing: vent stack required for new DWV, pressure balance valves on all shower/tub combos. Mechanical: exhaust fan required all bathrooms min 50 CFM.\n\nBATHROOM REMODEL — always include regardless of what client said: demo and haul existing fixtures, cement board substrate on wet walls, Schluter KERDI waterproofing on shower/tub, exhaust fan upgrade min 80 CFM, GFCI outlets, shut-off valve replacement, access panel for plumbing wall, drywall touch-up and paint. If Luxury finish add heated floor rough-in and thermostat.\n\nDECK/OUTDOOR STRUCTURES — always flag and price: concrete footings to 48 inch depth (Montana frost line — NON-NEGOTIABLE), ledger flashing and lag pattern per code, guard rail 36 inch min or 42 inch if over 30 inches above grade, lateral load connection, snow load engineering Flathead County 55-70 psf (engineer stamp required for any new roof structure), GFCI exterior outlets, railing system.\n\nWALL REMOVAL: flag load path analysis, temporary shoring, engineer stamp $2,500-4,500.\n\nPRE-1980 HOMES: flag asbestos testing $450-800 and potential abatement $3,000-15,000, lead paint testing $300-500.\n\nMONTANA WINTER BUILDS (Oct-April): add temporary heat $1,500-4,000 per month.\n\nCMB REAL UNIT COSTS — anchor all pricing here:\nFOUNDATION: Wall $42/SF, Slab $11.50/SF, Excavation $9.50/SF, Site clearing $5,200 LS, Drainage $5,200 LS.\nFRAMING: Walls 2x6 $6.50/SF, TJI floor $26/SF, Cathedral rafters $22/SF, Ridge LVL $9,800 LS, OSB $3.20/SF.\nROOFING: Standing seam $28-30/SF, Architectural shingle $9-12/SF, Ice and water shield $3.20/SF.\nPLUMBING: Master bath $18,000-35,000, Standard bath $12,000-22,000, New rough-in $8,000-15,000.\nELECTRICAL: Full rewire $15,000-35,000, Panel upgrade $3,500-6,000, Kitchen remodel $4,000-8,000, Bath remodel $2,500-4,500.\nHVAC: Forced air $12,000-22,000, Mini-split per zone $3,500-6,000, Radiant floor $18-28/SF.\nTILE/FLOORING: Tile shower $8,000-18,000, Tile floor $12-22/SF, Hardwood $10-18/SF, LVP $6-10/SF.\nCABINETRY: Kitchen Essential $15,000-25,000 / Designer $25,000-45,000 / Luxury $45,000-90,000. Bath vanity $2,500-8,000.\nDECK: Composite Trex $19/SF, Aluminum railing $85/LF, Elevated framing $52/SF, Footings $800-1,200 each.\nGENERAL CONDITIONS (1 month per $50k base cost): Permit $6,500-12,000, Superintendent $9,500 per 6 months, Temp power/water $2,800, Dumpsters $600 per pull, Builder risk $4,200, Temp fencing $1,800, Final cleaning $1,600. Add 5% contingency on all direct costs.\n\nPER-SF BENCHMARKS all-in including GC and 20% O&P:\nNew construction Essential $220-280/SF, Designer $280-380/SF, Luxury $380-550/SF.\nRemodel Essential $150-220/SF, Designer $220-350/SF, Luxury $350-600/SF.\nDeck/outdoor $85-200/SF. ADU $250-400/SF.\n\nPRICING PROCESS: 1) Identify all scope items. 2) Add missing code-required items. 3) Add contractor logic items. 4) Price at CMB rates. 5) Add General Conditions. 6) Add 5% contingency. 7) Apply 20% O&P to everything. 8) LOW = lean execution. HIGH = premium selections and full contingency (40-60% above LOW).\n\nRespond ONLY with valid JSON. No markdown. Start with { end with }."
+    const prompt = `Generate a conceptual budget estimate for this Montana construction project. Think like a 30-year Montana GC. Apply all contractor logic and code compliance rules. Apply 1 month duration per $50k of base cost for general conditions.
 
 Zones: ${zoneList}
 Notes: ${appData.projectNotes||"none"}
 
-Return ONLY this JSON with real 2026 Montana dollar amounts (no markdown, no backticks):
-{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"trade name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Dumpster/Debris Removal","low":0,"high":0},{"name":"Project Management","low":0,"high":0},{"name":"Accounting/Bookkeeping","low":0,"high":0},{"name":"Permits & Inspections","low":0,"high":0},{"name":"Temporary Facilities","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Site Supervision","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string"}`;
+Return ONLY this JSON with real 2026 CMB Montana dollar amounts (no markdown, no backticks):
+{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"trade name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Dumpster/Debris Removal","low":0,"high":0},{"name":"Project Management","low":0,"high":0},{"name":"Permits & Inspections","low":0,"high":0},{"name":"Temporary Facilities","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Site Supervision","low":0,"high":0},{"name":"Contingency (5%)","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string — specific code requirement or contractor logic item flagged"]}`;
     const raw = await callClaude(prompt, system);
     const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
     if(start===-1) throw new Error("No JSON returned");
@@ -507,6 +484,17 @@ function renderEstimate(){
         <p class="retainer-suggestion">Suggested: ${fmt$(suggested)} based on project size</p>
       </div>
     </div>
+    ${est.complianceNotes&&est.complianceNotes.length?`
+    <div class="card" style="border-color:rgba(201,168,76,0.5);">
+      <div class="section-title" style="color:var(--gold);">⚠ Contractor & Code Notes (Rep Only)</div>
+      <p style="font-size:11px;color:var(--stone-light);margin-bottom:12px;">These notes are for your review only and do not appear on the client document.</p>
+      ${est.complianceNotes.map(note=>`
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(92,88,80,0.2);">
+          <span style="color:var(--gold);font-size:14px;flex-shrink:0;">⚠</span>
+          <span style="font-size:13px;color:var(--cream-dk);line-height:1.6;">${esc(note)}</span>
+        </div>
+      `).join("")}
+    </div>`:""}
     <div id="est-error" class="error-msg hidden"></div>
     <button class="btn-secondary" onclick="appData.estimate=null;render()">↻ Regenerate</button>
     <button class="btn-primary" onclick="goTo(3)">Next: Concept Designs →</button>
