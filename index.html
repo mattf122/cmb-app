@@ -242,8 +242,8 @@ ${zoneList}
 Notes: ${appData.projectNotes||"none"}
 Referenced documents: ${docNames}
 
-Return ONLY this JSON with real 2026 CMB Montana dollar amounts. Keep lineItems to max 6 items per section — combine minor items into lump sums if needed. No markdown, no backticks:
-{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"CSI section name e.g. Site Work & Foundation","csiCode":"03 00 00","btCostCode":"Concrete","low":0,"high":0,"lineItems":[{"description":"specific line item e.g. Concrete slab 5in w/WWM","unit":"SF","qty":0,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit & Plan Review","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Architect / Structural Engineering","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Project Superintendent","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temporary Power, Water & Facilities","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Portable Toilets & Waste Disposal","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Job Site Dumpsters","low":0,"high":0,"qty":6,"unit":"EA"},{"name":"Builder Risk Insurance","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temporary Fencing & Site Security","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Final Cleaning & Window Wash","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Contingency (5%)","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
+Return ONLY this JSON with real 2026 CMB Montana dollar amounts. Max 4 line items per section. No markdown, no backticks:
+{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"03 00 00","btCostCode":"Concrete","low":0,"high":0,"lineItems":[{"description":"item","unit":"SF","qty":0,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Project Superintendent","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temp Power & Facilities","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Dumpsters","low":0,"high":0,"qty":4,"unit":"EA"},{"name":"Builder Risk Insurance","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Contingency (5%)","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
     // Build content array — add compressed site photos for visual analysis
     const estContent = [];
@@ -276,14 +276,22 @@ Return ONLY this JSON with real 2026 CMB Montana dollar amounts. Keep lineItems 
     if(estContent.length > 1){
       const res = await fetch("/.netlify/functions/claude", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ apiKey, model:"claude-haiku-4-5-20251001", max_tokens:8000, system, messages:[{role:"user", content:estContent}] })
+        body: JSON.stringify({ apiKey, model:"claude-sonnet-4-6", max_tokens:4000, system, messages:[{role:"user", content:estContent}] })
       });
       if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+res.status); }
       const data = await res.json();
       if(data.error) throw new Error(data.error.message);
       raw = data.content[0].text;
     } else {
-      raw = await callClaude(promptText, system);
+      // Use sonnet for estimate via direct fetch for speed
+    const estRes = await fetch("/.netlify/functions/claude", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ apiKey, model:"claude-sonnet-4-6", max_tokens:4000, system, messages:[{role:"user", content:promptText}] })
+    });
+    if(!estRes.ok){ const e=await estRes.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+estRes.status); }
+    const estData = await estRes.json();
+    if(estData.error) throw new Error(estData.error.message);
+    raw = estData.content[0].text;
     }
     const start = raw.indexOf("{");
     if(start===-1) throw new Error("No JSON returned");
