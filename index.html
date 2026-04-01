@@ -683,124 +683,32 @@ function exportExcel(){
 
   const rows = [];
 
-  // Single header row — Buildertrend maps these in its import wizard
-  rows.push([
-    "Title",
-    "Cost Code",
-    "CSI Code",
-    "Cost Type",
-    "Description",
-    "Quantity",
-    "Unit",
-    "Unit Cost",
-    "Total Low",
-    "Total High",
-    "Notes"
-  ]);
+  // Buildertrend flat import format — single header row, no high/low ranges
+  rows.push(["Title", "Cost Code", "CSI Code", "Cost Type", "Quantity", "Unit", "Unit Cost"]);
 
   if(est){
-    // Zone-level line items
     (est.zones||[]).forEach(z => {
       const csi = getCsiInfo(z.name);
-      rows.push([
-        z.name,
-        csi.bt,
-        csi.csi,
-        "Subcontractor",
-        z.notes||z.name,
-        1,
-        "LS",
-        z.low,
-        z.low,
-        z.high,
-        "Conceptual — zone total"
-      ]);
+      rows.push([z.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", z.high]);
     });
 
-    // Trade section line items
     (est.sections||[]).forEach(s => {
       const csi = getCsiInfo(s.name);
-      rows.push([
-        s.name,
-        csi.bt,
-        csi.csi,
-        "Subcontractor",
-        s.name + " — all zones",
-        1,
-        "LS",
-        s.low,
-        s.low,
-        s.high,
-        "Trade subtotal"
-      ]);
+      rows.push([s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
     });
 
-    // General conditions line items
     (est.generalConditions?.items||[]).forEach(item => {
       const csi = getCsiInfo(item.name);
-      rows.push([
-        item.name,
-        csi.bt,
-        csi.csi,
-        "Other",
-        item.name,
-        1,
-        "LS",
-        item.low,
-        item.low,
-        item.high,
-        "General conditions"
-      ]);
+      rows.push([item.name, csi.bt, csi.csi, "Other", 1, "LS", item.high]);
     });
 
-    // Subtotal row (internal only — O&P visible here)
-    rows.push([
-      "** SUBTOTAL (before O&P) — INTERNAL",
-      "General Conditions",
-      "01 00 00",
-      "Other",
-      "Subtotal before overhead and profit",
-      1, "LS",
-      est.subtotalLow||0,
-      est.subtotalLow||0,
-      est.subtotalHigh||0,
-      "INTERNAL USE ONLY — do not share with client"
-    ]);
-
-    rows.push([
-      "** OVERHEAD & PROFIT 20% — INTERNAL",
-      "General Conditions",
-      "01 00 00",
-      "Other",
-      "20% overhead and profit margin",
-      1, "LS",
-      est.overheadProfitLow||0,
-      est.overheadProfitLow||0,
-      est.overheadProfitHigh||0,
-      "INTERNAL USE ONLY — do not share with client"
-    ]);
-
-    rows.push([
-      "TOTAL CONCEPTUAL BUDGET",
-      "General Conditions",
-      "01 00 00",
-      "Other",
-      est.summary||"Total conceptual budget",
-      1, "LS",
-      est.totalLow,
-      est.totalLow,
-      est.totalHigh,
-      "Conceptual estimate — final pricing after design development"
-    ]);
+    rows.push(["Overhead & Profit (20%)", "General Conditions", "01 00 00", "Other", 1, "LS", est.overheadProfitHigh||0]);
   }
 
-  // UTF-8 BOM for Excel compatibility
   const csv = "\uFEFF" + rows.map(r =>
     r.map(cell => {
       const s = String(cell === null || cell === undefined ? "" : cell);
-      return (s.includes(",") || s.includes('"') || s.includes("\n"))
-        ? '"' + s.replace(/"/g, '""') + '"'
-        : s;
+      return s.includes(",") || s.includes('"') ? '"' + s.replace(/"/g,'""') + '"' : s;
     }).join(",")
   ).join("\n");
 
@@ -808,7 +716,7 @@ function exportExcel(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + "_BT_Import.csv";
+  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + ".csv";
   a.click();
   URL.revokeObjectURL(url);
 }
