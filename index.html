@@ -216,14 +216,45 @@ async function runGenerateEstimate(){
       `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
     ).join("\n");
     const system = "You are the estimating brain for Copper Mountain Builders — a premium design-build GC in Flathead Valley, Montana. You think and estimate exactly like a 30-year licensed Montana general contractor who knows code inside and out. NEVER use national average pricing. CMB is high-end. Always price accordingly.\n\nCONTRACTOR LOGIC AND CODE COMPLIANCE — apply automatically:\n\nUNIVERSAL: All work complies with IRC 2021 (Montana adopted). Flathead County permit required for: structural work, additions, new construction, decks over 200 SF or 30 inches above grade, electrical panel work, new plumbing rough-in. Structural engineering stamp required for: wall removal affecting load path, new roof structures, additions, spans over 20 feet. Energy code: walls R-21 min, ceilings R-49, floors R-30, windows U-0.30 or better. Egress: bedroom windows min 5.7 SF opening. Electrical: AFCI all living areas, GFCI all wet locations. Plumbing: vent stack required for new DWV, pressure balance valves on all shower/tub combos. Mechanical: exhaust fan required all bathrooms min 50 CFM.\n\nBATHROOM REMODEL — always include regardless of what client said: demo and haul existing fixtures, cement board substrate on wet walls, Schluter KERDI waterproofing on shower/tub, exhaust fan upgrade min 80 CFM, GFCI outlets, shut-off valve replacement, access panel for plumbing wall, drywall touch-up and paint. If Luxury finish add heated floor rough-in and thermostat.\n\nDECK/OUTDOOR STRUCTURES — always flag and price: concrete footings to 48 inch depth (Montana frost line — NON-NEGOTIABLE), ledger flashing and lag pattern per code, guard rail 36 inch min or 42 inch if over 30 inches above grade, lateral load connection, snow load engineering Flathead County 55-70 psf (engineer stamp required for any new roof structure), GFCI exterior outlets, railing system.\n\nWALL REMOVAL: flag load path analysis, temporary shoring, engineer stamp $2,500-4,500.\n\nPRE-1980 HOMES: flag asbestos testing $450-800 and potential abatement $3,000-15,000, lead paint testing $300-500.\n\nMONTANA WINTER BUILDS (Oct-April): add temporary heat $1,500-4,000 per month.\n\nCMB REAL UNIT COSTS — anchor all pricing here:\nFOUNDATION: Wall $42/SF, Slab $11.50/SF, Excavation $9.50/SF, Site clearing $5,200 LS, Drainage $5,200 LS.\nFRAMING: Walls 2x6 $6.50/SF, TJI floor $26/SF, Cathedral rafters $22/SF, Ridge LVL $9,800 LS, OSB $3.20/SF.\nROOFING: Standing seam $28-30/SF, Architectural shingle $9-12/SF, Ice and water shield $3.20/SF.\nPLUMBING: Master bath $18,000-35,000, Standard bath $12,000-22,000, New rough-in $8,000-15,000.\nELECTRICAL: Full rewire $15,000-35,000, Panel upgrade $3,500-6,000, Kitchen remodel $4,000-8,000, Bath remodel $2,500-4,500.\nHVAC: Forced air $12,000-22,000, Mini-split per zone $3,500-6,000, Radiant floor $18-28/SF.\nTILE/FLOORING: Tile shower $8,000-18,000, Tile floor $12-22/SF, Hardwood $10-18/SF, LVP $6-10/SF.\nCABINETRY: Kitchen Essential $15,000-25,000 / Designer $25,000-45,000 / Luxury $45,000-90,000. Bath vanity $2,500-8,000.\nDECK: Composite Trex $19/SF, Aluminum railing $85/LF, Elevated framing $52/SF, Footings $800-1,200 each.\nGENERAL CONDITIONS (1 month per $50k base cost): Permit $6,500-12,000, Superintendent $9,500 per 6 months, Temp power/water $2,800, Dumpsters $600 per pull, Builder risk $4,200, Temp fencing $1,800, Final cleaning $1,600. Add 5% contingency on all direct costs.\n\nPER-SF BENCHMARKS all-in including GC and 20% O&P:\nNew construction Essential $220-280/SF, Designer $280-380/SF, Luxury $380-550/SF.\nRemodel Essential $150-220/SF, Designer $220-350/SF, Luxury $350-600/SF.\nDeck/outdoor $85-200/SF. ADU $250-400/SF.\n\nPRICING PROCESS: 1) Identify all scope items. 2) Add missing code-required items. 3) Add contractor logic items. 4) Price at CMB rates. 5) Add General Conditions. 6) Add 5% contingency. 7) Apply 20% O&P to everything. 8) LOW = lean execution. HIGH = premium selections and full contingency (40-60% above LOW).\n\nRespond ONLY with valid JSON. No markdown. Start with { end with }."
-    const prompt = `Generate a conceptual budget estimate for this Montana construction project. Think like a 30-year Montana GC. Apply all contractor logic and code compliance rules. Apply 1 month duration per $50k of base cost for general conditions.
+    // Build document context for Claude
+  const allDocs = getAllDocs();
+  const imgDocs = allDocs.filter(d => d.type.includes("image"));
+  const docNames = allDocs.length > 0 ? allDocs.map(d=>d.name).join(", ") : "none";
 
+  // Build message content array — include images if available
+  const msgContent = [];
+  // Add any image documents (sketches, drawings as images) for Claude to analyze
+  for(const doc of imgDocs.slice(0,3)){ // max 3 images
+    msgContent.push({ type:"image", source:{ type:"base64", media_type:doc.type, data:doc.dataUrl.split(",")[1] }});
+  }
+  const promptText = `Generate a conceptual budget estimate for this Montana construction project. Think like a 30-year Montana GC. Apply all contractor logic and code compliance rules. Apply 1 month duration per $50k of base cost for general conditions.
+${imgDocs.length>0 ? "\nI have attached "+imgDocs.length+" drawing/sketch image(s) above — analyze them carefully for scope, dimensions, and details to improve estimate accuracy." : ""}
 Zones: ${zoneList}
 Notes: ${appData.projectNotes||"none"}
+Attached documents: ${docNames}
 
 Return ONLY this JSON with real 2026 CMB Montana dollar amounts (no markdown, no backticks):
 {"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"trade name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Dumpster/Debris Removal","low":0,"high":0},{"name":"Project Management","low":0,"high":0},{"name":"Permits & Inspections","low":0,"high":0},{"name":"Temporary Facilities","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Site Supervision","low":0,"high":0},{"name":"Contingency (5%)","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string — specific code requirement or contractor logic item flagged"]}`;
-    const raw = await callClaude(prompt, system);
+
+  // (prompt is now in promptText variable, content array in msgContent)
+    // Add text prompt to content array
+  msgContent.push({ type:"text", text:promptText });
+
+  // Call Claude with potentially multi-modal content
+  let raw;
+  if(msgContent.length > 1){
+    // Has images — use direct API call with content array
+    const res = await fetch("/.netlify/functions/claude", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ apiKey, model:"claude-haiku-4-5-20251001", max_tokens:4000, system, messages:[{role:"user",content:msgContent}] })
+    });
+    if(!res.ok) throw new Error("Server error: "+res.status);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    raw = data.content[0].text;
+  } else {
+    raw = await callClaude(promptText, system);
+  }
     const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
     if(start===-1) throw new Error("No JSON returned");
     const result = JSON.parse(raw.slice(start, end+1));
@@ -241,19 +272,106 @@ Return ONLY this JSON with real 2026 CMB Montana dollar amounts (no markdown, no
 async function runGenerateConcepts(){
   const btn = document.getElementById("concept-btn");
   const err = document.getElementById("concept-error");
-  btn.disabled = true; btn.textContent = "⏳ Writing…";
+  const statusEl = document.getElementById("concept-status");
+  btn.disabled = true; btn.textContent = "⏳ Analyzing…";
   err.classList.add("hidden");
+
   try {
-    for(const zone of appData.zones){
-      const system = "You are a design-build consultant. Write exactly 2 inspiring sentences. No bullet points, no headers.";
-      const prompt = `Write a 2-sentence design vision for a ${zone.type} with ${zone.finish} level finishes in a Montana home or building. Client notes: ${zone.notes||"standard scope"}. Be specific and aspirational.`;
-      appData.concepts[zone.id] = await callClaude(prompt, system);
+    for(let i=0; i<appData.zones.length; i++){
+      const zone = appData.zones[i];
+      if(statusEl) statusEl.textContent = `Analyzing zone ${i+1} of ${appData.zones.length}: ${zone.type}…`;
+
+      const system = `You are a senior design-build consultant at Copper Mountain Builders in Montana. 
+You analyze site visit photos and project notes to write a specific, vivid before-and-after design concept for client proposals.
+Your output has two parts:
+1. DESCRIPTION: Exactly 2-3 sentences that describe the transformation — reference what exists now and paint a picture of the finished result. Be specific to THIS project, not generic.
+2. IMAGE_PROMPT: A detailed text-to-image prompt (50-80 words) for generating a photorealistic concept rendering of the FINISHED space. Include room type, finish level, specific materials, lighting, style, and "Montana home, photorealistic interior rendering, professional architectural photography" at the end.
+
+Format your response EXACTLY like this:
+DESCRIPTION: [your 2-3 sentences here]
+IMAGE_PROMPT: [your detailed image generation prompt here]`;
+
+      // Build content array with photos
+      const msgContent = [];
+
+      // Add before photos
+      if(zone.photosBefore && zone.photosBefore.length > 0){
+        msgContent.push({type:"text", text:`BEFORE PHOTOS (current conditions — ${zone.photosBefore.length} photo${zone.photosBefore.length>1?"s":""}):`});
+        for(const photo of zone.photosBefore.slice(0,2)){
+          const b64 = photo.split(",")[1];
+          const mime = photo.split(";")[0].split(":")[1];
+          msgContent.push({type:"image", source:{type:"base64", media_type:mime, data:b64}});
+        }
+      }
+
+      // Add inspiration photos
+      if(zone.photosInspo && zone.photosInspo.length > 0){
+        msgContent.push({type:"text", text:`CLIENT INSPIRATION PHOTOS (${zone.photosInspo.length} photo${zone.photosInspo.length>1?"s":""}):`});
+        for(const photo of zone.photosInspo.slice(0,2)){
+          const b64 = photo.split(",")[1];
+          const mime = photo.split(";")[0].split(":")[1];
+          msgContent.push({type:"image", source:{type:"base64", media_type:mime, data:b64}});
+        }
+      }
+
+      // Add zone documents (images only)
+      const zoneDocs = (zone.docs||[]).filter(d=>d.type.includes("image"));
+      for(const doc of zoneDocs.slice(0,1)){
+        msgContent.push({type:"text", text:`ATTACHED DRAWING/SKETCH:`});
+        msgContent.push({type:"image", source:{type:"base64", media_type:doc.type, data:doc.dataUrl.split(",")[1]}});
+      }
+
+      // Add text context
+      const contextText = `
+Zone type: ${zone.type}
+Finish level: ${zone.finish}
+Scope of work: ${zone.notes||"Standard scope remodel"}
+${appData.projectNotes?"Overall project notes: "+appData.projectNotes:""}
+${zone.docs&&zone.docs.length>0?"Referenced documents: "+zone.docs.map(d=>d.name).join(", "):""}
+
+${msgContent.length > 0 ? "Analyze the photos above carefully." : "No photos were uploaded for this zone."}
+Write the DESCRIPTION and IMAGE_PROMPT as instructed.`;
+
+      msgContent.push({type:"text", text:contextText});
+
+      // Call API with vision if photos exist, text-only if not
+      let raw;
+      if(msgContent.length > 1){
+        const res = await fetch("/.netlify/functions/claude", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            apiKey,
+            model:"claude-haiku-4-5-20251001",
+            max_tokens:1000,
+            system,
+            messages:[{role:"user", content:msgContent}]
+          })
+        });
+        if(!res.ok) throw new Error("Server error: "+res.status);
+        const data = await res.json();
+        if(data.error) throw new Error(data.error.message);
+        raw = data.content[0].text;
+      } else {
+        raw = await callClaude(contextText, system);
+      }
+
+      // Parse DESCRIPTION and IMAGE_PROMPT from response
+      const descMatch = raw.match(/DESCRIPTION:\s*(.+?)(?=IMAGE_PROMPT:|$)/s);
+      const imgMatch  = raw.match(/IMAGE_PROMPT:\s*(.+?)$/s);
+
+      appData.concepts[zone.id] = descMatch ? descMatch[1].trim() : raw.trim();
+      if(!appData.conceptPrompts) appData.conceptPrompts = {};
+      appData.conceptPrompts[zone.id] = imgMatch ? imgMatch[1].trim() : buildImagePrompt(zone);
     }
+
+    if(statusEl) statusEl.textContent = "";
     render();
   } catch(e){
     err.textContent = "Error: " + e.message;
     err.classList.remove("hidden");
-    btn.disabled = false; btn.textContent = "✦ Generate Design Concepts";
+    btn.disabled = false;
+    btn.textContent = "✦ Generate Design Concepts";
+    if(statusEl) statusEl.textContent = "";
   }
 }
 
@@ -270,8 +388,12 @@ function buildImagePrompt(zone){
 }
 
 async function generateConceptImage(zone){
-  const prompt = encodeURIComponent(buildImagePrompt(zone));
-  const negPrompt = encodeURIComponent("ugly, blurry, low quality, distorted, dark, dirty, cluttered, construction mess");
+  // Use Claude-written image prompt if available, fallback to generic
+  const rawPrompt = (appData.conceptPrompts && appData.conceptPrompts[zone.id])
+    ? appData.conceptPrompts[zone.id]
+    : buildImagePrompt(zone);
+  const prompt = encodeURIComponent(rawPrompt);
+  const negPrompt = encodeURIComponent("ugly, blurry, low quality, distorted, dark, dirty, cluttered, construction mess, unfinished, messy");
   const seed = Math.floor(Math.random() * 999999);
   const url = `https://image.pollinations.ai/prompt/${prompt}?negative=${negPrompt}&width=768&height=512&seed=${seed}&nologo=true&enhance=true`;
   return url;
@@ -310,7 +432,46 @@ async function runGenerateImages(){
   render();
 }
 
-// ── Voice to text ────────────────────────────────────────────────────
+// ── Document handling ─────────────────────────────────────────────────
+async function handleDocuments(e, targetId, targetType){
+  const files = Array.from(e.target.files);
+  for(const file of files){
+    const dataUrl = await fileToDataURL(file);
+    const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl };
+    if(targetType==="project"){
+      if(!appData.projectDocs) appData.projectDocs=[];
+      appData.projectDocs.push(doc);
+    } else {
+      const zone=appData.zones.find(z=>z.id===targetId);
+      if(zone){ if(!zone.docs) zone.docs=[]; zone.docs.push(doc); }
+    }
+  }
+  e.target.value=""; render();
+}
+function removeDoc(targetType,targetId,docId){
+  if(targetType==="project"){ appData.projectDocs=(appData.projectDocs||[]).filter(d=>d.id!==docId); }
+  else { const zone=appData.zones.find(z=>z.id===targetId); if(zone) zone.docs=(zone.docs||[]).filter(d=>d.id!==docId); }
+  render();
+}
+function docIcon(t){ if(t.includes("pdf")) return "📄"; if(t.includes("word")||t.includes("docx")) return "📝"; if(t.includes("sheet")||t.includes("excel")) return "📊"; if(t.includes("image")) return "🖼"; return "📎"; }
+function fmtSize(b){ if(b<1024) return b+"B"; if(b<1048576) return (b/1024).toFixed(1)+"KB"; return (b/1048576).toFixed(1)+"MB"; }
+function docSection(targetType,targetId,label){
+  const docs=targetType==="project"?(appData.projectDocs||[]):(appData.zones.find(z=>z.id===targetId)?.docs||[]);
+  const inputId="docs_"+targetType+"_"+targetId;
+  return `<div class="field"><label class="field-label">${label}</label>
+    <input type="file" id="${inputId}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic" multiple style="display:none" onchange="handleDocuments(event,'${targetId}','${targetType}')"/>
+    <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);color:var(--copper);" onclick="document.getElementById('${inputId}').click()">📎 Attach Document</button>
+    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
+  </div>`;
+}
+function getAllDocs(){
+  const all=[];
+  (appData.projectDocs||[]).forEach(d=>all.push({...d,source:"Project"}));
+  appData.zones.forEach(z=>(z.docs||[]).forEach(d=>all.push({...d,source:z.type||"Zone"})));
+  return all;
+}
+
+// ── Voice to text ─────────────────────────────────────────────────────
 let recognition = null;
 let activeVoiceField = null;
 
@@ -366,11 +527,16 @@ function removePhoto(zoneId, type, idx){
 function photoSection(zoneId, type, label){
   const zone = appData.zones.find(z=>z.id===zoneId);
   const photos = (zone&&zone[type])||[];
-  const inputId = `photo_${zoneId}_${type}`;
+  const camId = `cam_${zoneId}_${type}`;
+  const libId = `lib_${zoneId}_${type}`;
   return `<div class="field">
     <label class="field-label">${label}</label>
-    <input type="file" id="${inputId}" accept="image/*" multiple capture="environment" style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
-    <button class="btn-small" onclick="document.getElementById('${inputId}').click()">📷 Add Photos</button>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <input type="file" id="${camId}" accept="image/*" multiple capture="environment" style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
+      <input type="file" id="${libId}" accept="image/*" multiple style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
+      <button class="btn-small" onclick="document.getElementById('${camId}').click()">📷 Camera</button>
+      <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);" onclick="document.getElementById('${libId}').click()">🖼 Library</button>
+    </div>
     <div class="img-row">${photos.map((src,i)=>`<div class="img-wrap"><img src="${src}" class="img-thumb" alt=""/><button class="img-remove" onclick="removePhoto('${zoneId}','${type}',${i})">✕</button></div>`).join("")}</div>
   </div>`;
 }
@@ -436,6 +602,7 @@ function renderScope(){
     <div class="card">
       <div class="section-title">Project Overview</div>
       <div class="field"><label class="field-label">Overall Project Notes</label><textarea placeholder="General observations, priorities, timeline, special conditions…" oninput="appData.projectNotes=this.value">${esc(appData.projectNotes)}</textarea></div>
+      ${docSection("project","project","Project Documents (Drawings, Specs, Plans)")}
     </div>
     ${zones.map((z,i)=>`
       <div class="zone-card">
@@ -461,6 +628,7 @@ function renderScope(){
         </div>
         ${photoSection(z.id,"photosBefore","Current Conditions Photos")}
         ${photoSection(z.id,"photosInspo","Client Inspiration / Pinterest Photos")}
+        ${docSection("zone",z.id,"Zone Documents (Drawings, Specs)")}
       </div>
     `).join("")}
     <button class="btn-secondary" onclick="appData.zones.push({id:'z'+Date.now(),type:'',sqft:'',finish:'Designer',notes:'',photosBefore:[],photosInspo:[]});render()">+ Add Zone / Area</button>
@@ -563,6 +731,7 @@ function renderConcepts(){
       <div class="section-title">AI Design Concepts</div>
       <p style="font-size:14px;color:var(--cream-dk);line-height:1.7;margin-bottom:16px;">Claude will write an inspiring design vision for each zone based on scope and finish level.</p>
       <div id="concept-error" class="error-msg hidden"></div>
+      <p id="concept-status" style="font-size:13px;color:var(--gold);min-height:20px;margin-bottom:8px;"></p>
       <button class="btn-primary" id="concept-btn" onclick="runGenerateConcepts()">✦ Generate Design Concepts</button>
     </div>
     ${appData.zones.map(z=>`
@@ -739,6 +908,7 @@ function renderPrintDoc(){
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span style="color:#555;">Subtotal (before O&P)</span><span>${fmt$(est.subtotalLow)} – ${fmt$(est.subtotalHigh)}</span></div>
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#b87333;"><span>Overhead & Profit (20%) — Internal</span><span>${fmt$(est.overheadProfitLow)} – ${fmt$(est.overheadProfitHigh)}</span></div>
       </div>`:""}
+      ${getAllDocs().length>0?`<div style="margin-top:12px;padding:10px 14px;background:#f5f0e8;border-radius:6px;"><p style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#b87333;margin-bottom:6px;">Documents Reviewed</p>${getAllDocs().map(doc=>`<p style="font-size:12px;color:#555;">📎 ${esc(doc.name)} <span style="color:#999;">(${esc(doc.source)})</span></p>`).join("")}</div>`:""}
       <p style="font-size:11px;color:#888;font-style:italic;margin-top:10px;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
     </div>`:""}
     ${(d.zones||[]).map(z=>`<div style="margin-bottom:24px;page-break-inside:avoid;">
