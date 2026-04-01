@@ -295,11 +295,24 @@ JSON only, no markdown:
     try {
       result = JSON.parse(jsonStr);
     } catch(e1) {
-      const end = raw.lastIndexOf("}");
-      if(end > start){
-        try { result = JSON.parse(raw.slice(start, end+1)); }
-        catch(e2) { throw new Error("JSON parse error — tap Regenerate to try again"); }
-      } else { throw new Error("Incomplete response — tap Regenerate to try again"); }
+      // Try fixing common truncation issues
+      let fixed = jsonStr;
+      // Count unclosed brackets and close them
+      const opens = (fixed.match(/\[/g)||[]).length;
+      const closes = (fixed.match(/\]/g)||[]).length;
+      const openBraces = (fixed.match(/\{/g)||[]).length;
+      const closeBraces = (fixed.match(/\}/g)||[]).length;
+      // Remove trailing comma if present before closing
+      fixed = fixed.replace(/,\s*$/, "");
+      // Add missing closing brackets/braces
+      for(let i=0; i<opens-closes; i++) fixed += "]";
+      for(let i=0; i<openBraces-closeBraces; i++) fixed += "}";
+      try {
+        result = JSON.parse(fixed);
+      } catch(e2) {
+        // Show first 200 chars of raw to help debug
+        throw new Error("Parse failed. Raw starts with: " + raw.slice(0,150));
+      }
     }
     appData.estimate = result;
     const suggested = calcRetainerSuggestion(result.totalLow);
