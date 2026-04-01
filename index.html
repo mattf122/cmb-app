@@ -403,33 +403,38 @@ async function runGenerateImages(){
   const btn = document.getElementById("img-gen-btn");
   const err = document.getElementById("img-gen-error");
   const status = document.getElementById("img-gen-status");
-  btn.disabled = true;
-  err.classList.add("hidden");
+  if(btn) btn.disabled = true;
+  if(err) err.classList.add("hidden");
+
+  if(!appData.conceptImages) appData.conceptImages = {};
 
   for(let i = 0; i < appData.zones.length; i++){
     const zone = appData.zones[i];
-    status.textContent = `Generating image ${i+1} of ${appData.zones.length}…`;
+    if(status) status.textContent = `Generating image ${i+1} of ${appData.zones.length}…`;
     try {
       const imgUrl = await generateConceptImage(zone);
-      // Pre-load the image to confirm it works
-      await new Promise((resolve, reject) => {
+      // Pre-load the image
+      await new Promise((resolve) => {
         const img = new Image();
         img.onload = resolve;
-        img.onerror = reject;
+        img.onerror = resolve; // don't fail on error, just continue
         img.src = imgUrl;
-        setTimeout(reject, 30000); // 30s timeout
+        setTimeout(resolve, 20000); // 20s max per image
       });
-      if(!appData.conceptImages) appData.conceptImages = {};
       appData.conceptImages[zone.id] = imgUrl;
+
+      // Update just this zone's image inline without full re-render
+      const imgContainer = document.getElementById("concept-img-"+zone.id);
+      if(imgContainer){
+        imgContainer.innerHTML = `<img src="${imgUrl}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);margin-top:8px;" alt="Concept rendering"/>`;
+      }
     } catch(e){
       console.error("Image gen failed for zone", zone.id, e);
     }
   }
 
-  status.textContent = "";
-  btn.disabled = false;
-  btn.textContent = "↻ Regenerate Images";
-  render();
+  if(status) status.textContent = "✓ Images generated";
+  if(btn){ btn.disabled=false; btn.textContent="↻ Regenerate Images"; }
 }
 
 // ── Document handling ─────────────────────────────────────────────────
@@ -739,12 +744,11 @@ function renderConcepts(){
         <div style="color:var(--copper);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${esc(z.type)} — ${esc(z.finish)}</div>
         ${concepts[z.id]?`
           <textarea style="min-height:90px;" oninput="appData.concepts['${z.id}']=this.value">${esc(concepts[z.id])}</textarea>
-          ${appData.conceptImages&&appData.conceptImages[z.id]?`
-            <div style="margin-top:12px;">
-              <label class="field-label">AI Concept Rendering</label>
+          <div id="concept-img-${z.id}" style="margin-top:8px;">
+            ${appData.conceptImages&&appData.conceptImages[z.id]?`
               <img src="${appData.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);" alt="Concept rendering"/>
-            </div>
-          `:""}
+            `:""}
+          </div>
           ${z.photosInspo&&z.photosInspo.length?`<div class="img-row" style="margin-top:8px;">${z.photosInspo.map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
         `:`<p style="color:var(--stone-light);font-size:13px;font-style:italic;">Tap Generate Concepts above first</p>`}
       </div>
@@ -752,15 +756,18 @@ function renderConcepts(){
 
     ${hasAll?`
     <div class="card-copper">
-      <div class="section-title">AI Concept Images</div>
-      <p style="font-size:13px;color:var(--cream-dk);line-height:1.7;margin-bottom:14px;">Generate a photorealistic concept rendering for each zone. These appear in the printed proposal alongside the design description.</p>
+      <div class="section-title">Step 2 — AI Concept Images</div>
+      <p style="font-size:13px;color:var(--cream-dk);line-height:1.7;margin-bottom:10px;">
+        Generate a concept rendering for each zone based on the descriptions above. Images appear in the printed proposal.
+      </p>
       <div id="img-gen-error" class="error-msg hidden"></div>
-      <p id="img-gen-status" style="font-size:13px;color:var(--gold);margin-bottom:10px;min-height:20px;"></p>
-      <button class="btn-secondary" id="img-gen-btn" onclick="runGenerateImages()">✦ Generate Concept Images</button>
+      <p id="img-gen-status" style="font-size:13px;color:var(--gold);min-height:20px;margin-bottom:8px;"></p>
+      <button class="btn-secondary" id="img-gen-btn" onclick="runGenerateImages()">
+        ${Object.keys(appData.conceptImages||{}).length > 0 ? "↻ Regenerate Concept Images" : "✦ Generate Concept Images"}
+      </button>
     </div>
-    `:""}
-
-    <button class="btn-primary" ${hasAll?"":`disabled style="opacity:0.5"`} onclick="${hasAll?"goTo(4)":"alert('Generate concepts first')"}">Next: Review & Sign →</button>
+    <button class="btn-primary" onclick="goTo(4)">Next: Review & Sign →</button>
+    `:`<button class="btn-primary" disabled style="opacity:0.5">Generate Concepts First</button>`}
     <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 }
@@ -984,6 +991,7 @@ function renderPrintDoc(){
 
 // ── Main render ────────────────────────────────────────────────────────
 function render(){
+  const scrollY = window.scrollY; // save scroll position
   const app = document.getElementById("app");
   let html = "";
   if(currentStep===0) html = renderClient();
@@ -997,6 +1005,8 @@ function render(){
   if(currentStep===4){
     setTimeout(()=>{ initSigPad("sig_client","clientSig"); initSigPad("sig_rep","repSig"); }, 50);
   }
+  // Restore scroll position after render
+  setTimeout(()=>{ window.scrollTo(0, scrollY); }, 0);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────
