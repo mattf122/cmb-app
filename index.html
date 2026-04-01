@@ -336,6 +336,8 @@ REFERENCED DOCUMENTS: ${docNames}
 
 ${siteAnalysis ? `SITE ANALYSIS FROM PHOTOS:\n${siteAnalysis}` : "No photos provided — estimate from scope notes only."}
 
+CRITICAL: Your response must start with { and end with }. No ```json, no markdown, no explanation — ONLY the raw JSON object.
+
 Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section. Use qty/unit/unitCost where known, otherwise 1/LS/total:
 {"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"string","low":0,"high":0,"lineItems":[{"description":"string","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"string","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
@@ -375,15 +377,16 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
       raw = haikuData.content[0].text;
     }
 
+    // Strip markdown fences if present
+    let cleaned = raw.replace(/```json/g,"").replace(/```/g,"").trim();
     // Parse JSON with auto-fix for truncation
-    const start = raw.indexOf("{");
+    const start = cleaned.indexOf("{");
     if(start===-1) throw new Error("No JSON returned. Response: " + raw.slice(0,100));
-    let jsonStr = raw.slice(start);
+    let jsonStr = cleaned.slice(start);
     let result;
     try {
       result = JSON.parse(jsonStr);
     } catch(e1) {
-      // Auto-fix truncation
       let fixed = jsonStr.replace(/,\s*$/, "");
       const opens = (fixed.match(/\[/g)||[]).length;
       const closes = (fixed.match(/\]/g)||[]).length;
@@ -392,7 +395,7 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
       for(let i=0; i<opens-closes; i++) fixed += "]";
       for(let i=0; i<openB-closeB; i++) fixed += "}";
       try { result = JSON.parse(fixed); }
-      catch(e2) { throw new Error("Parse failed — Raw: " + raw.slice(0,200)); }
+      catch(e2) { throw new Error("Still parsing — tap Regenerate: " + cleaned.slice(0,150)); }
     }
 
     appData.estimate = result;
