@@ -2,10 +2,13 @@
   command = "echo 'Build complete'"
   functions = "netlify/functions"
   publish = "."
-
+ 
 [functions]
   node_bundler = "esbuild"
-
+ 
+[functions."claude"]
+  timeout = 30
+ 
 [[headers]]
   for = "/*"
   [headers.values]
