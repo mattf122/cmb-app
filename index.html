@@ -221,103 +221,185 @@ async function callClaude(prompt, system){
 async function runGenerateEstimate(){
   const btn = document.getElementById("gen-est-btn");
   const err = document.getElementById("est-error");
-  btn.disabled = true; btn.textContent = "⏳ Generating…";
+  btn.disabled = true;
   err.classList.add("hidden");
-  try {
-    const zones = appData.zones;
-    const zoneList = zones.map(z =>
-      `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
-    ).join("\n");
 
+  const zones = appData.zones;
+  const zoneList = zones.map(z =>
+    `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
+  ).join("\n");
+
+  try {
+    // ── CALL 1: Photo analysis with Haiku (fast) ──────────────────────
+    btn.textContent = "⏳ Analyzing site conditions…";
     const allDocs = getAllDocs();
+    const imgDocs = allDocs.filter(d => d.type.includes("image"));
     const docNames = allDocs.length > 0 ? allDocs.map(d=>d.name).join(", ") : "none";
 
-    const system = "You are a construction estimator for Copper Mountain Builders, a premium GC in Flathead Valley Montana. Use 2026 Montana market rates. CMB prices are HIGH end — never use national averages. Apply 20% O&P to all costs. Respond ONLY with valid JSON starting with { and ending with }. No markdown.";
+    let siteAnalysis = "";
 
-    const hasPhotos = allDocs.filter(d=>d.type.includes("image")).length > 0;
-    const promptText = `Estimate this Montana construction project for Copper Mountain Builders (premium GC, high-end pricing, 20% O&P included). Zones: ${zoneList}. Notes: ${appData.projectNotes||"none"}.${hasPhotos?" Photos attached — use them to inform scope.":""}
-
-JSON only, no markdown:
-{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"c","btCostCode":"b","low":0,"high":0,"lineItems":[{"description":"d","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Superintendent","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temp Facilities","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Dumpsters","low":0,"high":0,"qty":4,"unit":"EA"},{"name":"Builder Risk Insurance","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Contingency 5%","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
-
-    // Build content array — add compressed site photos for visual analysis
-    const estContent = [];
-
-    // Collect all before/condition photos from all zones (compressed)
-    const allBeforePhotos = [];
-    for(const zone of appData.zones){
-      for(const photo of (zone.photosBefore||[]).slice(0,1)){ // 1 per zone max
-        allBeforePhotos.push({photo, zoneName: zone.type});
+    // Collect photos — before photos from zones + image docs
+    const photosToAnalyze = [];
+    for(const zone of zones){
+      for(const photo of (zone.photosBefore||[]).slice(0,3)){
+        photosToAnalyze.push({photo, label: zone.type + " — existing condition"});
+      }
+      for(const photo of (zone.photosInspo||[]).slice(0,2)){
+        photosToAnalyze.push({photo, label: zone.type + " — client inspiration"});
       }
     }
-    // Add image docs
-    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)){
-      allBeforePhotos.push({photo: doc.dataUrl, zoneName: doc.name});
+    for(const doc of imgDocs.slice(0,4)){
+      photosToAnalyze.push({photo: doc.dataUrl, label: doc.name});
     }
 
-    if(allBeforePhotos.length > 0){
-      estContent.push({type:"text", text:"SITE CONDITION PHOTOS (analyze these to inform the estimate):"});
-      for(const {photo, zoneName} of allBeforePhotos.slice(0,4)){ // max 4 total
-        estContent.push({type:"text", text:`[${zoneName}]`});
+    if(photosToAnalyze.length > 0){
+      // Build vision content array
+      const visionContent = [];
+      visionContent.push({type:"text", text:"You are a construction estimator reviewing site photos for a Montana residential/commercial project. Analyze these photos and provide a detailed scope assessment covering: existing conditions, materials, complexity factors, scope items visible, anything that affects cost. Be specific and thorough."});
+
+      for(const {photo, label} of photosToAnalyze.slice(0,15)){
+        visionContent.push({type:"text", text:`[${label}]:`});
         const compressed = await compressImage(photo, 600, 0.6);
-        const b64 = compressed.split(",")[1];
-        estContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
+        visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
+      }
+      visionContent.push({type:"text", text:`Zones being estimated: ${zoneList}\n\nProvide a detailed written scope assessment that a construction estimator can use to price this project accurately. Include observed conditions, implied scope, and any cost risk factors.`});
+
+      const visionRes = await fetch("/.netlify/functions/claude", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          apiKey,
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1500,
+          messages: [{role:"user", content:visionContent}]
+        })
+      });
+      if(visionRes.ok){
+        const visionData = await visionRes.json();
+        if(visionData.content && visionData.content[0]){
+          siteAnalysis = visionData.content[0].text;
+        }
       }
     }
 
-    estContent.push({type:"text", text:promptText});
+    // ── CALL 2: Full estimate with Sonnet (accurate) ──────────────────
+    btn.textContent = "⏳ Building estimate…";
+
+    const estimateSystem = `You are an expert construction estimator for Copper Mountain Builders, a premium design-build GC in Flathead Valley, Montana. You produce detailed conceptual budgets for residential, commercial, and government projects.
+
+PRICING RULES — NON-NEGOTIABLE:
+- All pricing reflects 2026 Northwest Montana (Kalispell/Flathead Valley) market rates
+- CMB is a HIGH-END premium contractor — never use national averages or budget pricing
+- Apply 20% overhead and profit to ALL costs including general conditions
+- LOW range = lean execution with standard selections
+- HIGH range = premium selections, full contingency, worst-case site conditions (HIGH should be 40-60% above LOW)
+
+REAL CMB UNIT COSTS:
+Foundation: slab $11.50/SF, wall $42/SF, excavation $9.50/SF
+Framing: 2x6 walls $6.50/SF, TJI floor $26/SF, cathedral rafters $22/SF, ridge LVL $9,800 LS
+Roofing: standing seam $28-30/SF, architectural shingle $9-12/SF, ice+water $3.20/SF
+Plumbing: master bath $18,000-35,000, standard bath $12,000-22,000, new rough-in $8,000-15,000
+Electrical: full rewire $15,000-35,000, panel upgrade $3,500-6,000, kitchen $4,000-8,000, bath $2,500-4,500
+HVAC: forced air $12,000-22,000, mini-split/zone $3,500-6,000, radiant floor $18-28/SF
+Tile/flooring: shower tile $8,000-18,000, tile floor $12-22/SF, hardwood $10-18/SF, LVP $6-10/SF
+Cabinetry: kitchen Essential $15-25k / Designer $25-45k / Luxury $45-90k; bath vanity $2,500-8,000
+Deck: composite Trex $19/SF, aluminum rail $85/LF, elevated framing $52/SF, footings $800-1,200 EA
+General Conditions (scale by 1 month per $50k base cost):
+  Permit Flathead County $6,500-12,000
+  Superintendent $9,500 per 6 months
+  Temp power/water $2,800
+  Dumpsters $600/pull (est 4-8 pulls)
+  Builder risk insurance $4,200
+  Temp fencing $1,800
+  Final cleaning $1,600
+  5% contingency on direct costs
+
+PER-SF BENCHMARKS (all-in with GC + 20% O&P):
+New construction: Essential $220-280/SF, Designer $280-380/SF, Luxury $380-550/SF
+Remodel: Essential $150-220/SF, Designer $220-350/SF, Luxury $350-600/SF
+Deck/outdoor: $85-200/SF | ADU: $250-400/SF
+
+MONTANA CODE REQUIREMENTS TO PRICE IN:
+- Bathroom remodels: always include demo/haul, cement board, Schluter waterproofing, 80CFM exhaust fan, GFCI, shut-off valves, access panel, drywall/paint
+- Decks: 48-inch frost line footings (non-negotiable), ledger flashing, guard rails, snow load engineering stamp
+- Any structural work: engineering stamp $2,500-4,500
+- Pre-1980 homes: flag asbestos/lead testing
+
+Respond ONLY with valid JSON. No markdown. Start with { end with }.`;
+
+    const estimatePrompt = `Generate a detailed conceptual budget for this Montana construction project.
+
+PROJECT ZONES:
+${zoneList}
+
+OVERALL NOTES: ${appData.projectNotes||"none"}
+REFERENCED DOCUMENTS: ${docNames}
+
+${siteAnalysis ? `SITE ANALYSIS FROM PHOTOS:\n${siteAnalysis}` : "No photos provided — estimate from scope notes only."}
+
+Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section. Use qty/unit/unitCost where known, otherwise 1/LS/total:
+{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"string","low":0,"high":0,"lineItems":[{"description":"string","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"string","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
     let raw;
-    if(estContent.length > 1){
-      const res = await fetch("/.netlify/functions/claude", {
+    try {
+      // Try Sonnet first
+      const sonnetRes = await fetch("/.netlify/functions/claude", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ apiKey, model:"claude-haiku-4-5-20251001", max_tokens:3000, system, messages:[{role:"user", content:estContent}] })
+        body: JSON.stringify({
+          apiKey,
+          model: "claude-sonnet-4-6",
+          max_tokens: 4000,
+          system: estimateSystem,
+          messages: [{role:"user", content:estimatePrompt}]
+        })
       });
-      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+res.status); }
-      const data = await res.json();
-      if(data.error) throw new Error(data.error.message);
-      raw = data.content[0].text;
-    } else {
-      // Use sonnet for estimate via direct fetch for speed
-    const estRes = await fetch("/.netlify/functions/claude", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ apiKey, model:"claude-haiku-4-5-20251001", max_tokens:3000, system, messages:[{role:"user", content:promptText}] })
-    });
-    if(!estRes.ok){ const e=await estRes.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+estRes.status); }
-    const estData = await estRes.json();
-    if(estData.error) throw new Error(estData.error.message);
-    raw = estData.content[0].text;
+      if(!sonnetRes.ok) throw new Error("Sonnet error: " + sonnetRes.status);
+      const sonnetData = await sonnetRes.json();
+      if(sonnetData.error) throw new Error(sonnetData.error.message);
+      raw = sonnetData.content[0].text;
+    } catch(sonnetErr) {
+      // Fall back to Haiku
+      btn.textContent = "⏳ Retrying…";
+      const haikuRes = await fetch("/.netlify/functions/claude", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          apiKey,
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 3000,
+          system: estimateSystem,
+          messages: [{role:"user", content:estimatePrompt}]
+        })
+      });
+      if(!haikuRes.ok){ const e=await haikuRes.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+haikuRes.status); }
+      const haikuData = await haikuRes.json();
+      if(haikuData.error) throw new Error(haikuData.error.message);
+      raw = haikuData.content[0].text;
     }
+
+    // Parse JSON with auto-fix for truncation
     const start = raw.indexOf("{");
-    if(start===-1) throw new Error("No JSON returned");
+    if(start===-1) throw new Error("No JSON returned. Response: " + raw.slice(0,100));
     let jsonStr = raw.slice(start);
     let result;
     try {
       result = JSON.parse(jsonStr);
     } catch(e1) {
-      // Try fixing common truncation issues
-      let fixed = jsonStr;
-      // Count unclosed brackets and close them
+      // Auto-fix truncation
+      let fixed = jsonStr.replace(/,\s*$/, "");
       const opens = (fixed.match(/\[/g)||[]).length;
       const closes = (fixed.match(/\]/g)||[]).length;
-      const openBraces = (fixed.match(/\{/g)||[]).length;
-      const closeBraces = (fixed.match(/\}/g)||[]).length;
-      // Remove trailing comma if present before closing
-      fixed = fixed.replace(/,\s*$/, "");
-      // Add missing closing brackets/braces
+      const openB = (fixed.match(/\{/g)||[]).length;
+      const closeB = (fixed.match(/\}/g)||[]).length;
       for(let i=0; i<opens-closes; i++) fixed += "]";
-      for(let i=0; i<openBraces-closeBraces; i++) fixed += "}";
-      try {
-        result = JSON.parse(fixed);
-      } catch(e2) {
-        // Show first 200 chars of raw to help debug
-        throw new Error("Parse failed. Raw starts with: " + raw.slice(0,150));
-      }
+      for(let i=0; i<openB-closeB; i++) fixed += "}";
+      try { result = JSON.parse(fixed); }
+      catch(e2) { throw new Error("Parse failed — Raw: " + raw.slice(0,200)); }
     }
+
     appData.estimate = result;
     const suggested = calcRetainerSuggestion(result.totalLow);
     if(!appData.retainerAmount) appData.retainerAmount = suggested;
     render();
+
   } catch(e){
     err.textContent = "Error: " + e.message;
     err.classList.remove("hidden");
