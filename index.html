@@ -621,74 +621,184 @@ function renderVisitsModal(){
 }
 
 // ── Export functions ──────────────────────────────────────────────────
-function exportCSV(){
+// CSI Division mapping to Buildertrend cost code names
+const CSI_MAP = {
+  "Site Work":              { csi: "02 00 00", bt: "Sitework" },
+  "Site & Foundation":      { csi: "03 00 00", bt: "Concrete" },
+  "Concrete":               { csi: "03 00 00", bt: "Concrete" },
+  "Foundation":             { csi: "03 11 00", bt: "Concrete - Foundations" },
+  "Masonry":                { csi: "04 00 00", bt: "Masonry" },
+  "Framing":                { csi: "06 10 00", bt: "Rough Carpentry" },
+  "Structural Framing":     { csi: "06 10 00", bt: "Rough Carpentry" },
+  "Rough Carpentry":        { csi: "06 10 00", bt: "Rough Carpentry" },
+  "Finish Carpentry":       { csi: "06 20 00", bt: "Finish Carpentry" },
+  "Cabinetry":              { csi: "06 41 00", bt: "Cabinets & Countertops" },
+  "Cabinets":               { csi: "06 41 00", bt: "Cabinets & Countertops" },
+  "Countertops":            { csi: "06 41 16", bt: "Cabinets & Countertops" },
+  "Thermal & Moisture":     { csi: "07 00 00", bt: "Insulation" },
+  "Insulation":             { csi: "07 21 00", bt: "Insulation" },
+  "Roofing":                { csi: "07 30 00", bt: "Roofing" },
+  "Waterproofing":          { csi: "07 10 00", bt: "Waterproofing & Damp-proofing" },
+  "Exterior Siding":        { csi: "07 46 00", bt: "Siding" },
+  "Siding":                 { csi: "07 46 00", bt: "Siding" },
+  "Doors & Windows":        { csi: "08 00 00", bt: "Doors & Windows" },
+  "Windows":                { csi: "08 50 00", bt: "Doors & Windows" },
+  "Doors":                  { csi: "08 10 00", bt: "Doors & Windows" },
+  "Drywall":                { csi: "09 29 00", bt: "Drywall" },
+  "Interior Finishes":      { csi: "09 00 00", bt: "Interior Finishes" },
+  "Tile":                   { csi: "09 30 00", bt: "Tile" },
+  "Tile & Flooring":        { csi: "09 30 00", bt: "Tile" },
+  "Flooring":               { csi: "09 60 00", bt: "Flooring" },
+  "Painting":               { csi: "09 90 00", bt: "Painting" },
+  "Specialties":            { csi: "10 00 00", bt: "Specialties" },
+  "Plumbing":               { csi: "22 00 00", bt: "Plumbing" },
+  "HVAC":                   { csi: "23 00 00", bt: "HVAC" },
+  "Mechanical":             { csi: "23 00 00", bt: "HVAC" },
+  "Electrical":             { csi: "26 00 00", bt: "Electrical" },
+  "Deck":                   { csi: "06 15 00", bt: "Decks & Porches" },
+  "Outdoor Living":         { csi: "02 90 00", bt: "Decks & Porches" },
+  "General Conditions":     { csi: "01 00 00", bt: "General Conditions" },
+  "Dumpster/Debris Removal":{ csi: "01 74 19", bt: "Construction Waste Management" },
+  "Project Management":     { csi: "01 31 00", bt: "Project Management" },
+  "Permits & Inspections":  { csi: "01 41 00", bt: "Permits & Fees" },
+  "Temporary Facilities":   { csi: "01 50 00", bt: "Temporary Facilities" },
+  "Builder Risk Insurance": { csi: "01 18 00", bt: "Insurance" },
+  "Site Supervision":       { csi: "01 31 13", bt: "Superintendent" },
+  "Contingency (5%)":       { csi: "01 21 16", bt: "Contingency" },
+};
+
+function getCsiInfo(name){
+  // Try exact match first, then partial match
+  if(CSI_MAP[name]) return CSI_MAP[name];
+  const key = Object.keys(CSI_MAP).find(k =>
+    name.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(name.toLowerCase())
+  );
+  return key ? CSI_MAP[key] : { csi: "01 00 00", bt: "General Conditions" };
+}
+
+function exportExcel(){
   const d = appData;
   const est = d.estimate;
   const dt = new Date().toLocaleDateString();
   const rows = [];
 
-  rows.push(["COPPER MOUNTAIN BUILDERS — CONCEPTUAL BUDGET"]);
-  rows.push(["Date", dt]);
-  rows.push(["Client", d.clientName||"", "Project", (d.projectAddress||"") + " " + (d.projectCity||"")]);
-  rows.push(["Rep", d.repName||""]);
+  // Header
+  rows.push(["COPPER MOUNTAIN BUILDERS — CONCEPTUAL BUDGET (INTERNAL)"]);
+  rows.push(["Date:", dt, "", "Client:", d.clientName||"", "", "Rep:", d.repName||""]);
+  rows.push(["Project:", (d.projectAddress||"") + ", " + (d.projectCity||"") + ", MT"]);
   rows.push([]);
 
+  // Column headers
+  rows.push([
+    "CSI CODE",
+    "BUILDERTREND COST CODE",
+    "DESCRIPTION",
+    "ZONE / AREA",
+    "LOW ESTIMATE",
+    "HIGH ESTIMATE",
+    "NOTES"
+  ]);
+
   if(est){
-    rows.push(["PROJECT SUMMARY"]);
-    rows.push(["","","LOW","HIGH"]);
-    (est.zones||[]).forEach(z => rows.push(["",z.name, z.low, z.high]));
+    // Zone breakdown with CSI codes
+    (est.zones||[]).forEach(z => {
+      const csiInfo = getCsiInfo(z.name);
+      rows.push([
+        csiInfo.csi,
+        csiInfo.bt,
+        z.name,
+        z.name,
+        z.low,
+        z.high,
+        z.notes||""
+      ]);
+    });
     rows.push([]);
 
+    // Trade sections with CSI codes
     if(est.sections && est.sections.length){
-      rows.push(["SCOPE OF WORK","","LOW","HIGH"]);
-      est.sections.forEach(s => rows.push(["",s.name, s.low, s.high]));
+      rows.push(["--- TRADE BREAKDOWN ---","","","","",""]);
+      est.sections.forEach(s => {
+        const csiInfo = getCsiInfo(s.name);
+        rows.push([
+          csiInfo.csi,
+          csiInfo.bt,
+          s.name,
+          "All Zones",
+          s.low,
+          s.high,
+          ""
+        ]);
+      });
       rows.push([]);
     }
 
+    // General conditions with CSI codes
     if(est.generalConditions){
-      rows.push(["GENERAL CONDITIONS","","LOW","HIGH"]);
-      (est.generalConditions.items||[]).forEach(item =>
-        rows.push(["",item.name, item.low, item.high])
-      );
-      rows.push(["","GC SUBTOTAL", est.generalConditions.low, est.generalConditions.high]);
+      rows.push(["--- GENERAL CONDITIONS ---","","","","",""]);
+      (est.generalConditions.items||[]).forEach(item => {
+        const csiInfo = getCsiInfo(item.name);
+        rows.push([
+          csiInfo.csi,
+          csiInfo.bt,
+          item.name,
+          "Project-Wide",
+          item.low,
+          item.high,
+          ""
+        ]);
+      });
+      rows.push([
+        "01 00 00",
+        "General Conditions",
+        "GC SUBTOTAL",
+        "",
+        est.generalConditions.low,
+        est.generalConditions.high,
+        ""
+      ]);
       rows.push([]);
     }
 
-    rows.push(["SUBTOTAL (before O&P)","", est.subtotalLow||"", est.subtotalHigh||""]);
-    rows.push(["OVERHEAD & PROFIT (20%)","", est.overheadProfitLow||"", est.overheadProfitHigh||""]);
+    // Subtotals — include O&P on internal copy only
+    rows.push(["", "", "SUBTOTAL (before O&P)", "", est.subtotalLow||"", est.subtotalHigh||"", ""]);
+    rows.push(["", "", "OVERHEAD & PROFIT (20%) — INTERNAL ONLY", "", est.overheadProfitLow||"", est.overheadProfitHigh||"", "NOT shown on client proposal"]);
     rows.push([]);
-    rows.push(["TOTAL CONCEPTUAL BUDGET","", est.totalLow, est.totalHigh]);
+    rows.push(["", "", "TOTAL CONCEPTUAL BUDGET", "", est.totalLow, est.totalHigh, ""]);
+    rows.push(["", "", "Design Retainer", "", d.retainerAmount||"", "", ""]);
     rows.push([]);
-    rows.push(["Design Retainer","", d.retainerAmount||""]);
-    rows.push([]);
+
+    // Budget range explanation
     rows.push(["BUDGET RANGE EXPLANATION"]);
     rows.push(["Range Low — " + fmt$(est.totalLow), "Favorable bids, standard material selections, efficient execution"]);
     rows.push(["Range High — " + fmt$(est.totalHigh), "Competitive market, premium selections, scope additions or site conditions"]);
     rows.push([]);
-    rows.push(["*This is a conceptual budget prepared prior to design development. Actual costs will vary based on final drawings, material selections, site conditions, and contractor bids received."]);
+    rows.push(["*Conceptual budget only. Actual costs vary based on final drawings, material selections, site conditions, and contractor bids."]);
+
+    // Zone details
+    rows.push([]);
+    rows.push(["ZONE DETAILS"]);
+    (d.zones||[]).forEach((z,i) => {
+      rows.push([`Zone ${i+1}: ${z.type}`, `Finish: ${z.finish}`, `SF: ${z.sqft||"unknown"}`]);
+      if(z.notes) rows.push(["Scope:", z.notes]);
+      if(d.concepts && d.concepts[z.id]) rows.push(["Design Vision:", d.concepts[z.id]]);
+      rows.push([]);
+    });
   }
 
-  // Zone details
-  rows.push([]);
-  rows.push(["ZONE DETAILS"]);
-  (d.zones||[]).forEach((z,i) => {
-    rows.push([]);
-    rows.push([`Zone ${i+1}: ${z.type}`, `Finish: ${z.finish}`, `SF: ${z.sqft||"unknown"}`]);
-    rows.push(["Scope:", z.notes||""]);
-    if(d.concepts && d.concepts[z.id]) rows.push(["Design Vision:", d.concepts[z.id]]);
-  });
+  // Build CSV (Excel-compatible UTF-8 with BOM)
+  const csv = "\uFEFF" + rows.map(r => r.map(cell => {
+    const s = String(cell === null || cell === undefined ? "" : cell);
+    return (s.includes(",") || s.includes('"') || s.includes("\n"))
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  }).join(",")).join("\n");
 
-  const csv = rows.map(r => r.map(cell =>
-    typeof cell === "string" && (cell.includes(",") || cell.includes('"') || cell.includes("\n"))
-      ? '"' + cell.replace(/"/g,'""') + '"'
-      : cell
-  ).join(",")).join("\n");
-
-  const blob = new Blob([csv], {type:"text/csv"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = (d.clientName||"CMB") + "_" + dt.replace(/\//g,"-") + "_Estimate.csv";
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt.replace(/\//g,"-") + "_Estimate_INTERNAL.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -972,11 +1082,7 @@ function renderEstimate(){
       `).join("")}
       <div class="estimate-row" style="border:none;"><span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Subtotal</span><span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.generalConditions.low)} – ${fmt$(est.generalConditions.high)}</span></div>
     </div>`:""}
-    ${est.subtotalLow?`
-    <div class="card" style="border-color:rgba(201,168,76,0.3);">
-      <div class="estimate-row"><span style="font-size:13px;color:var(--stone-light);">Subtotal (before margin)</span><span style="font-size:13px;color:var(--cream-dk);">${fmt$(est.subtotalLow)} – ${fmt$(est.subtotalHigh)}</span></div>
-      <div class="estimate-row"><span style="font-size:13px;color:var(--stone-light);">Overhead & Profit (20%)</span><span style="font-size:13px;color:var(--copper-lt);">${fmt$(est.overheadProfitLow)} – ${fmt$(est.overheadProfitHigh)}</span></div>
-    </div>`:""}
+
     <div class="card">
       <div class="field">
         <label class="field-label">Design Retainer Amount ($)</label>
@@ -1134,7 +1240,7 @@ function renderReview(){
     <div class="card" style="margin-top:8px;">
       <div class="section-title">Export & Share</div>
       <button class="btn-secondary" onclick="emailProposal()" style="margin-bottom:8px;">📧 Email Proposal to Client</button>
-      <button class="btn-secondary" onclick="exportCSV()" style="margin-bottom:8px;">📊 Download Estimate (CSV)</button>
+      <button class="btn-secondary" onclick="exportExcel()" style="margin-bottom:8px;">📊 Download Estimate for Buildertrend (CSV/Excel)</button>
       <button class="btn-secondary" onclick="downloadVisitJSON()" style="margin-bottom:8px;">💾 Download Full Visit Data</button>
       <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
     </div>
@@ -1193,8 +1299,7 @@ function renderPrintDoc(){
         </table>
       </div>
       <div style="margin-top:12px;padding:8px 12px;background:#faf7f2;border-radius:4px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span style="color:#555;">Subtotal (before O&P)</span><span>${fmt$(est.subtotalLow)} – ${fmt$(est.subtotalHigh)}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#b87333;"><span>Overhead & Profit (20%) — Internal</span><span>${fmt$(est.overheadProfitLow)} – ${fmt$(est.overheadProfitHigh)}</span></div>
+
       </div>`:""}
       ${getAllDocs().length>0?`<div style="margin-top:12px;padding:10px 14px;background:#f5f0e8;border-radius:6px;"><p style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#b87333;margin-bottom:6px;">Documents Reviewed</p>${getAllDocs().map(doc=>`<p style="font-size:12px;color:#555;">📎 ${esc(doc.name)} <span style="color:#999;">(${esc(doc.source)})</span></p>`).join("")}</div>`:""}
       <p style="font-size:11px;color:#888;font-style:italic;margin-top:10px;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
