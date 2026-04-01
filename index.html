@@ -206,7 +206,7 @@ async function callClaude(prompt, system){
     body: JSON.stringify({
       apiKey,
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
+      max_tokens: 6000,
       system,
       messages: [{ role: "user", content: prompt }]
     })
@@ -243,7 +243,7 @@ Notes: ${appData.projectNotes||"none"}
 Referenced documents: ${docNames}
 
 Return ONLY this JSON with real 2026 CMB Montana dollar amounts (no markdown, no backticks):
-{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"trade name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Dumpster/Debris Removal","low":0,"high":0},{"name":"Project Management","low":0,"high":0},{"name":"Permits & Inspections","low":0,"high":0},{"name":"Temporary Facilities","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Site Supervision","low":0,"high":0},{"name":"Contingency (5%)","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
+{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"CSI section name e.g. Site Work & Foundation","csiCode":"03 00 00","btCostCode":"Concrete","low":0,"high":0,"lineItems":[{"description":"specific line item e.g. Concrete slab 5in w/WWM","unit":"SF","qty":0,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit & Plan Review","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Architect / Structural Engineering","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Project Superintendent","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temporary Power, Water & Facilities","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Portable Toilets & Waste Disposal","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Job Site Dumpsters","low":0,"high":0,"qty":6,"unit":"EA"},{"name":"Builder Risk Insurance","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temporary Fencing & Site Security","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Final Cleaning & Window Wash","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Contingency (5%)","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
     // Build content array — add compressed site photos for visual analysis
     const estContent = [];
@@ -681,26 +681,69 @@ function exportExcel(){
 
   const rows = [];
 
-  // Buildertrend flat import format — single header row, no high/low ranges
+  // Buildertrend Cost Group format:
+  // Group row: Title only (no cost) — BT treats this as a Cost Group header
+  // Line item rows: Title, Cost Code, Cost Type, Qty, Unit, Unit Cost
+  // Using HIGH estimate values per user preference
   rows.push(["Title", "Cost Code", "CSI Code", "Cost Type", "Quantity", "Unit", "Unit Cost"]);
 
   if(est){
-    (est.zones||[]).forEach(z => {
-      const csi = getCsiInfo(z.name);
-      rows.push([z.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", z.high]);
-    });
-
+    // Trade sections with line items
     (est.sections||[]).forEach(s => {
-      const csi = getCsiInfo(s.name);
-      rows.push([s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+      const csi = s.csiCode ? {csi: s.csiCode, bt: s.btCostCode||getCsiInfo(s.name).bt} : getCsiInfo(s.name);
+
+      // Group header row — no cost, just the section name
+      rows.push([s.name, "", "", "", "", "", ""]);
+
+      // Line items under this section
+      if(s.lineItems && s.lineItems.length){
+        s.lineItems.forEach(item => {
+          const qty = item.qty || 1;
+          const unit = item.unit || "LS";
+          const unitCost = item.unitCost || (qty > 0 ? Math.round(item.total / qty) : item.total);
+          rows.push([
+            "  " + item.description,  // indent to show child relationship
+            csi.bt,
+            csi.csi,
+            "Subcontractor",
+            qty,
+            unit,
+            unitCost
+          ]);
+        });
+      } else {
+        // Fallback if no line items — single lump sum row
+        rows.push(["  " + s.name + " (lump sum)", csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+      }
+
+      // Section subtotal row
+      rows.push(["  SUBTOTAL — " + s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+      rows.push(["", "", "", "", "", "", ""]);  // blank spacer
     });
 
-    (est.generalConditions?.items||[]).forEach(item => {
-      const csi = getCsiInfo(item.name);
-      rows.push([item.name, csi.bt, csi.csi, "Other", 1, "LS", item.high]);
-    });
+    // General conditions section
+    if(est.generalConditions){
+      rows.push(["General Conditions", "", "", "", "", "", ""]);
+      (est.generalConditions.items||[]).forEach(item => {
+        const csi = getCsiInfo(item.name);
+        rows.push([
+          "  " + item.name,
+          csi.bt,
+          csi.csi,
+          "Other",
+          item.qty || 1,
+          item.unit || "LS",
+          item.high
+        ]);
+      });
+      rows.push(["  SUBTOTAL — General Conditions", "General Conditions", "01 00 00", "Other", 1, "LS", est.generalConditions.high]);
+      rows.push(["", "", "", "", "", "", ""]);
+    }
 
-    rows.push(["Overhead & Profit (20%)", "General Conditions", "01 00 00", "Other", 1, "LS", est.overheadProfitHigh||0]);
+    // Overhead & Profit — internal line
+    rows.push(["Overhead & Profit (20%) — INTERNAL", "General Conditions", "01 00 00", "Other", 1, "LS", est.overheadProfitHigh||0]);
+    rows.push(["", "", "", "", "", "", ""]);
+    rows.push(["TOTAL CONCEPTUAL BUDGET (HIGH)", "General Conditions", "01 00 00", "Other", 1, "LS", est.totalHigh]);
   }
 
   const csv = "\uFEFF" + rows.map(r =>
@@ -985,18 +1028,36 @@ function renderEstimate(){
     </div>
     ${est.sections&&est.sections.length?`
     <div class="card">
-      <div class="section-title">By Trade</div>
-      ${est.sections.map(s=>`
-        <div class="estimate-row"><span style="font-size:13px;color:var(--cream-dk);">${esc(s.name)}</span><span style="font-size:13px;color:var(--cream);">${fmt$(s.low)} – ${fmt$(s.high)}</span></div>
+      <div class="section-title">Scope of Work — By Trade</div>
+      ${est.sections.map((s,si)=>`
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(184,115,51,0.3);">
+            <span style="font-size:13px;font-weight:bold;color:var(--copper);">${esc(s.name)}</span>
+            <span style="font-size:13px;color:var(--gold);font-weight:bold;">${fmt$(s.low)} – ${fmt$(s.high)}</span>
+          </div>
+          ${s.lineItems&&s.lineItems.length?`
+            <div style="padding-left:8px;margin-top:6px;">
+              ${s.lineItems.map(item=>`
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
+                  <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
+                  <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">${item.qty} ${esc(item.unit)} @ $${Number(item.unitCost).toLocaleString()} = <strong style="color:var(--cream);">$${Number(item.total).toLocaleString()}</strong></span>
+                </div>
+              `).join("")}
+            </div>
+          `:""}
+        </div>
       `).join("")}
     </div>`:""}
     ${est.generalConditions?`
     <div class="card">
       <div class="section-title">General Conditions (${est.generalConditions.months||1} month${(est.generalConditions.months||1)>1?"s":""})</div>
       ${(est.generalConditions.items||[]).map(item=>`
-        <div class="estimate-row"><span style="font-size:13px;color:var(--cream-dk);">${esc(item.name)}</span><span style="font-size:13px;color:var(--cream);">${fmt$(item.low)} – ${fmt$(item.high)}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
+          <span style="font-size:12px;color:var(--cream-dk);">${esc(item.name)}</span>
+          <span style="font-size:12px;color:var(--cream);">${item.qty||1} ${esc(item.unit||"LS")} — ${fmt$(item.low)} – ${fmt$(item.high)}</span>
+        </div>
       `).join("")}
-      <div class="estimate-row" style="border:none;"><span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Subtotal</span><span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.generalConditions.low)} – ${fmt$(est.generalConditions.high)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Subtotal</span><span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.generalConditions.low)} – ${fmt$(est.generalConditions.high)}</span></div>
     </div>`:""}
 
     <div class="card">
@@ -1199,10 +1260,28 @@ function renderPrintDoc(){
           <tr style="background:#f5f0e8;font-weight:bold;"><td style="padding:10px;">TOTAL RANGE</td><td style="padding:10px;text-align:right;color:#b87333;">${fmt$(est.totalLow)}</td><td style="padding:10px;text-align:right;color:#b87333;">${fmt$(est.totalHigh)}</td></tr>
         </tbody>
       </table>
-      ${est.sections&&est.sections.length?`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
-        <thead><tr style="background:#faf7f2;"><th style="text-align:left;padding:6px 10px;color:#b87333;">Trade / Section</th><th style="text-align:right;padding:6px 10px;color:#b87333;">Low</th><th style="text-align:right;padding:6px 10px;color:#b87333;">High</th></tr></thead>
-        <tbody>${est.sections.map(s=>`<tr style="border-bottom:1px solid #ede8e0;"><td style="padding:6px 10px;">${esc(s.name)}</td><td style="padding:6px 10px;text-align:right;">${fmt$(s.low)}</td><td style="padding:6px 10px;text-align:right;">${fmt$(s.high)}</td></tr>`).join("")}</tbody>
-      </table>`:""}
+      ${est.sections&&est.sections.length?`
+        ${est.sections.map(s=>`
+          <div style="margin-bottom:14px;page-break-inside:avoid;">
+            <div style="display:flex;justify-content:space-between;background:#f5f0e8;padding:6px 10px;margin-bottom:4px;">
+              <span style="font-size:12px;font-weight:bold;color:#b87333;">${esc(s.name)}</span>
+              <span style="font-size:12px;font-weight:bold;color:#b87333;">${fmt$(s.low)} – ${fmt$(s.high)}</span>
+            </div>
+            ${s.lineItems&&s.lineItems.length?`
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <tbody>${s.lineItems.map(item=>`
+                  <tr style="border-bottom:1px solid #f0ebe0;">
+                    <td style="padding:4px 10px;color:#444;">${esc(item.description)}</td>
+                    <td style="padding:4px 8px;text-align:center;color:#888;">${item.qty} ${esc(item.unit)}</td>
+                    <td style="padding:4px 8px;text-align:right;color:#888;">$${Number(item.unitCost).toLocaleString()}</td>
+                    <td style="padding:4px 10px;text-align:right;color:#333;">$${Number(item.total).toLocaleString()}</td>
+                  </tr>
+                `).join("")}</tbody>
+              </table>
+            `:""}
+          </div>
+        `).join("")}
+      `:""}
       <div style="padding:10px 14px;background:#f5f0e8;border-radius:6px;display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:13px;color:#555;">Design Retainer (Non-Refundable)</span>
         <span style="font-size:14px;font-weight:bold;color:#b87333;">${fmt$(d.retainerAmount||0)}</span>
