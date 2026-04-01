@@ -635,11 +635,9 @@ const CSI_MAP = {
   "Cabinetry":              { csi: "06 41 00", bt: "Cabinets & Countertops" },
   "Cabinets":               { csi: "06 41 00", bt: "Cabinets & Countertops" },
   "Countertops":            { csi: "06 41 16", bt: "Cabinets & Countertops" },
-  "Thermal & Moisture":     { csi: "07 00 00", bt: "Insulation" },
   "Insulation":             { csi: "07 21 00", bt: "Insulation" },
   "Roofing":                { csi: "07 30 00", bt: "Roofing" },
-  "Waterproofing":          { csi: "07 10 00", bt: "Waterproofing & Damp-proofing" },
-  "Exterior Siding":        { csi: "07 46 00", bt: "Siding" },
+  "Waterproofing":          { csi: "07 10 00", bt: "Waterproofing" },
   "Siding":                 { csi: "07 46 00", bt: "Siding" },
   "Doors & Windows":        { csi: "08 00 00", bt: "Doors & Windows" },
   "Windows":                { csi: "08 50 00", bt: "Doors & Windows" },
@@ -650,7 +648,6 @@ const CSI_MAP = {
   "Tile & Flooring":        { csi: "09 30 00", bt: "Tile" },
   "Flooring":               { csi: "09 60 00", bt: "Flooring" },
   "Painting":               { csi: "09 90 00", bt: "Painting" },
-  "Specialties":            { csi: "10 00 00", bt: "Specialties" },
   "Plumbing":               { csi: "22 00 00", bt: "Plumbing" },
   "HVAC":                   { csi: "23 00 00", bt: "HVAC" },
   "Mechanical":             { csi: "23 00 00", bt: "HVAC" },
@@ -668,7 +665,6 @@ const CSI_MAP = {
 };
 
 function getCsiInfo(name){
-  // Try exact match first, then partial match
   if(CSI_MAP[name]) return CSI_MAP[name];
   const key = Object.keys(CSI_MAP).find(k =>
     name.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(name.toLowerCase())
@@ -679,126 +675,140 @@ function getCsiInfo(name){
 function exportExcel(){
   const d = appData;
   const est = d.estimate;
-  const dt = new Date().toLocaleDateString();
+  const dt = new Date().toLocaleDateString().replace(/\//g,"-");
+
+  // Buildertrend expects a FLAT table with a single header row
+  // Required columns: Title, Cost Code, Cost Type, Description, Quantity, Unit, Unit Cost, Total
+  // We output: Title, Cost Code (BT name), CSI Code, Cost Type, Description, Quantity, Unit, Unit Cost (Low), Total (Low), Total (High), Notes
+
   const rows = [];
 
-  // Header
-  rows.push(["COPPER MOUNTAIN BUILDERS — CONCEPTUAL BUDGET (INTERNAL)"]);
-  rows.push(["Date:", dt, "", "Client:", d.clientName||"", "", "Rep:", d.repName||""]);
-  rows.push(["Project:", (d.projectAddress||"") + ", " + (d.projectCity||"") + ", MT"]);
-  rows.push([]);
-
-  // Column headers
+  // Single header row — Buildertrend maps these in its import wizard
   rows.push([
-    "CSI CODE",
-    "BUILDERTREND COST CODE",
-    "DESCRIPTION",
-    "ZONE / AREA",
-    "LOW ESTIMATE",
-    "HIGH ESTIMATE",
-    "NOTES"
+    "Title",
+    "Cost Code",
+    "CSI Code",
+    "Cost Type",
+    "Description",
+    "Quantity",
+    "Unit",
+    "Unit Cost",
+    "Total Low",
+    "Total High",
+    "Notes"
   ]);
 
   if(est){
-    // Zone breakdown with CSI codes
+    // Zone-level line items
     (est.zones||[]).forEach(z => {
-      const csiInfo = getCsiInfo(z.name);
+      const csi = getCsiInfo(z.name);
       rows.push([
-        csiInfo.csi,
-        csiInfo.bt,
         z.name,
-        z.name,
+        csi.bt,
+        csi.csi,
+        "Subcontractor",
+        z.notes||z.name,
+        1,
+        "LS",
+        z.low,
         z.low,
         z.high,
-        z.notes||""
+        "Conceptual — zone total"
       ]);
     });
-    rows.push([]);
 
-    // Trade sections with CSI codes
-    if(est.sections && est.sections.length){
-      rows.push(["--- TRADE BREAKDOWN ---","","","","",""]);
-      est.sections.forEach(s => {
-        const csiInfo = getCsiInfo(s.name);
-        rows.push([
-          csiInfo.csi,
-          csiInfo.bt,
-          s.name,
-          "All Zones",
-          s.low,
-          s.high,
-          ""
-        ]);
-      });
-      rows.push([]);
-    }
-
-    // General conditions with CSI codes
-    if(est.generalConditions){
-      rows.push(["--- GENERAL CONDITIONS ---","","","","",""]);
-      (est.generalConditions.items||[]).forEach(item => {
-        const csiInfo = getCsiInfo(item.name);
-        rows.push([
-          csiInfo.csi,
-          csiInfo.bt,
-          item.name,
-          "Project-Wide",
-          item.low,
-          item.high,
-          ""
-        ]);
-      });
+    // Trade section line items
+    (est.sections||[]).forEach(s => {
+      const csi = getCsiInfo(s.name);
       rows.push([
-        "01 00 00",
-        "General Conditions",
-        "GC SUBTOTAL",
-        "",
-        est.generalConditions.low,
-        est.generalConditions.high,
-        ""
+        s.name,
+        csi.bt,
+        csi.csi,
+        "Subcontractor",
+        s.name + " — all zones",
+        1,
+        "LS",
+        s.low,
+        s.low,
+        s.high,
+        "Trade subtotal"
       ]);
-      rows.push([]);
-    }
-
-    // Subtotals — include O&P on internal copy only
-    rows.push(["", "", "SUBTOTAL (before O&P)", "", est.subtotalLow||"", est.subtotalHigh||"", ""]);
-    rows.push(["", "", "OVERHEAD & PROFIT (20%) — INTERNAL ONLY", "", est.overheadProfitLow||"", est.overheadProfitHigh||"", "NOT shown on client proposal"]);
-    rows.push([]);
-    rows.push(["", "", "TOTAL CONCEPTUAL BUDGET", "", est.totalLow, est.totalHigh, ""]);
-    rows.push(["", "", "Design Retainer", "", d.retainerAmount||"", "", ""]);
-    rows.push([]);
-
-    // Budget range explanation
-    rows.push(["BUDGET RANGE EXPLANATION"]);
-    rows.push(["Range Low — " + fmt$(est.totalLow), "Favorable bids, standard material selections, efficient execution"]);
-    rows.push(["Range High — " + fmt$(est.totalHigh), "Competitive market, premium selections, scope additions or site conditions"]);
-    rows.push([]);
-    rows.push(["*Conceptual budget only. Actual costs vary based on final drawings, material selections, site conditions, and contractor bids."]);
-
-    // Zone details
-    rows.push([]);
-    rows.push(["ZONE DETAILS"]);
-    (d.zones||[]).forEach((z,i) => {
-      rows.push([`Zone ${i+1}: ${z.type}`, `Finish: ${z.finish}`, `SF: ${z.sqft||"unknown"}`]);
-      if(z.notes) rows.push(["Scope:", z.notes]);
-      if(d.concepts && d.concepts[z.id]) rows.push(["Design Vision:", d.concepts[z.id]]);
-      rows.push([]);
     });
+
+    // General conditions line items
+    (est.generalConditions?.items||[]).forEach(item => {
+      const csi = getCsiInfo(item.name);
+      rows.push([
+        item.name,
+        csi.bt,
+        csi.csi,
+        "Other",
+        item.name,
+        1,
+        "LS",
+        item.low,
+        item.low,
+        item.high,
+        "General conditions"
+      ]);
+    });
+
+    // Subtotal row (internal only — O&P visible here)
+    rows.push([
+      "** SUBTOTAL (before O&P) — INTERNAL",
+      "General Conditions",
+      "01 00 00",
+      "Other",
+      "Subtotal before overhead and profit",
+      1, "LS",
+      est.subtotalLow||0,
+      est.subtotalLow||0,
+      est.subtotalHigh||0,
+      "INTERNAL USE ONLY — do not share with client"
+    ]);
+
+    rows.push([
+      "** OVERHEAD & PROFIT 20% — INTERNAL",
+      "General Conditions",
+      "01 00 00",
+      "Other",
+      "20% overhead and profit margin",
+      1, "LS",
+      est.overheadProfitLow||0,
+      est.overheadProfitLow||0,
+      est.overheadProfitHigh||0,
+      "INTERNAL USE ONLY — do not share with client"
+    ]);
+
+    rows.push([
+      "TOTAL CONCEPTUAL BUDGET",
+      "General Conditions",
+      "01 00 00",
+      "Other",
+      est.summary||"Total conceptual budget",
+      1, "LS",
+      est.totalLow,
+      est.totalLow,
+      est.totalHigh,
+      "Conceptual estimate — final pricing after design development"
+    ]);
   }
 
-  // Build CSV (Excel-compatible UTF-8 with BOM)
-  const csv = "\uFEFF" + rows.map(r => r.map(cell => {
-    const s = String(cell === null || cell === undefined ? "" : cell);
-    return (s.includes(",") || s.includes('"') || s.includes("\n"))
-      ? '"' + s.replace(/"/g, '""') + '"'
-      : s;
-  }).join(",")).join("\n");
+  // UTF-8 BOM for Excel compatibility
+  const csv = "\uFEFF" + rows.map(r =>
+    r.map(cell => {
+      const s = String(cell === null || cell === undefined ? "" : cell);
+      return (s.includes(",") || s.includes('"') || s.includes("\n"))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    }).join(",")
+  ).join("\n");
 
   const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt.replace(/\//g,"-") + "_Estimate_INTERNAL.csv";
+  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + "_BT_Import.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
