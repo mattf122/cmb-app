@@ -294,31 +294,33 @@ IMAGE_PROMPT: [your detailed image generation prompt here]`;
       // Build content array with photos
       const msgContent = [];
 
-      // Add before photos
+      // Add before photos (compressed)
       if(zone.photosBefore && zone.photosBefore.length > 0){
-        msgContent.push({type:"text", text:`BEFORE PHOTOS (current conditions — ${zone.photosBefore.length} photo${zone.photosBefore.length>1?"s":""}):`});
+        msgContent.push({type:"text", text:`BEFORE PHOTOS (current conditions):`});
         for(const photo of zone.photosBefore.slice(0,2)){
-          const b64 = photo.split(",")[1];
-          const mime = photo.split(";")[0].split(":")[1];
-          msgContent.push({type:"image", source:{type:"base64", media_type:mime, data:b64}});
+          const compressed = await compressImage(photo, 800, 0.65);
+          const b64 = compressed.split(",")[1];
+          msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
         }
       }
 
-      // Add inspiration photos
+      // Add inspiration photos (compressed)
       if(zone.photosInspo && zone.photosInspo.length > 0){
-        msgContent.push({type:"text", text:`CLIENT INSPIRATION PHOTOS (${zone.photosInspo.length} photo${zone.photosInspo.length>1?"s":""}):`});
+        msgContent.push({type:"text", text:`CLIENT INSPIRATION PHOTOS:`});
         for(const photo of zone.photosInspo.slice(0,2)){
-          const b64 = photo.split(",")[1];
-          const mime = photo.split(";")[0].split(":")[1];
-          msgContent.push({type:"image", source:{type:"base64", media_type:mime, data:b64}});
+          const compressed = await compressImage(photo, 800, 0.65);
+          const b64 = compressed.split(",")[1];
+          msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
         }
       }
 
-      // Add zone documents (images only)
+      // Add zone documents (images only, compressed)
       const zoneDocs = (zone.docs||[]).filter(d=>d.type.includes("image"));
       for(const doc of zoneDocs.slice(0,1)){
         msgContent.push({type:"text", text:`ATTACHED DRAWING/SKETCH:`});
-        msgContent.push({type:"image", source:{type:"base64", media_type:doc.type, data:doc.dataUrl.split(",")[1]}});
+        const compressed = await compressImage(doc.dataUrl, 800, 0.65);
+        const b64 = compressed.split(",")[1];
+        msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
       }
 
       // Add text context
@@ -474,6 +476,24 @@ function getAllDocs(){
   (appData.projectDocs||[]).forEach(d=>all.push({...d,source:"Project"}));
   appData.zones.forEach(z=>(z.docs||[]).forEach(d=>all.push({...d,source:z.type||"Zone"})));
   return all;
+}
+
+// ── Image compression ─────────────────────────────────────────────────
+async function compressImage(dataUrl, maxWidth=800, quality=0.7){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if(w > maxWidth){ h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback to original
+    img.src = dataUrl;
+  });
 }
 
 // ── Voice to text ─────────────────────────────────────────────────────
