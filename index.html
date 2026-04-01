@@ -586,10 +586,8 @@ function getSavedVisits(){
 
 function startNewVisit(){
   if(!confirm("Start a new visit? Current unsaved data will be cleared.")) return;
-  appData = { zones:[], concepts:{}, conceptImages:{}, conceptPrompts:{}, projectDocs:[] };
-  currentStep = 0;
   localStorage.removeItem(AUTOSAVE_KEY);
-  render();
+  window.location.reload();
 }
 
 // ── Visits Modal ──────────────────────────────────────────────────────
@@ -1314,42 +1312,7 @@ function render(){
 }
 
 // ── Init ───────────────────────────────────────────────────────────────
-// Load auto-saved session if exists
-try {
-  const saved = localStorage.getItem(AUTOSAVE_KEY);
-  if(saved){
-    const snap = JSON.parse(saved);
-    // Restore step but keep current appData structure
-    if(snap._step !== undefined) currentStep = snap._step;
-    // Restore non-image fields
-    appData.company      = snap.company      || appData.company;
-    appData.repName      = snap.repName      || appData.repName;
-    appData.clientName   = snap.clientName   || appData.clientName;
-    appData.clientEmail  = snap.clientEmail  || appData.clientEmail;
-    appData.clientPhone  = snap.clientPhone  || appData.clientPhone;
-    appData.clientAddress = snap.clientAddress || appData.clientAddress;
-    appData.clientCity   = snap.clientCity   || appData.clientCity;
-    appData.clientZip    = snap.clientZip    || appData.clientZip;
-    appData.projectAddress = snap.projectAddress || appData.projectAddress;
-    appData.projectCity  = snap.projectCity  || appData.projectCity;
-    appData.projectNotes = snap.projectNotes || appData.projectNotes;
-    appData.retainerAmount = snap.retainerAmount || appData.retainerAmount;
-    // Restore zones (without photos — those need to be re-added)
-    if(snap.zones && snap.zones.length > 0){
-      appData.zones = snap.zones.map(z => ({
-        ...z,
-        photosBefore: [],
-        photosInspo: [],
-        docs: []
-      }));
-    }
-    // Restore estimate and concepts
-    if(snap.estimate) appData.estimate = snap.estimate;
-    if(snap.concepts) appData.concepts = snap.concepts;
-    if(snap.conceptPrompts) appData.conceptPrompts = snap.conceptPrompts;
-  }
-} catch(e){ console.warn("Auto-load failed:", e); }
-
+// Always start fresh — auto-save is only used by the saved visits feature
 render();
 if(!apiKey){
   setTimeout(()=>{
