@@ -201,8 +201,8 @@ ZONES: ${zoneList}
 NOTES: ${appData.projectNotes||"none"}
 ${siteAnalysis ? "SITE ANALYSIS:\n"+siteAnalysis : ""}
 
-Return ONLY this JSON — section totals only, NO lineItems array needed:
-{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"bt name","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit","low":0,"high":0},{"name":"Engineering","low":0,"high":0},{"name":"Superintendent","low":0,"high":0},{"name":"Temp Facilities","low":0,"high":0},{"name":"Dumpsters","low":0,"high":0},{"name":"Builder Risk Insurance","low":0,"high":0},{"name":"Contingency 5%","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
+Return ONLY this JSON. MAX 6 sections total — combine related trades. Short names only. NO lineItems:
+{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Permit","low":0,"high":0},{"name":"Engineering","low":0,"high":0},{"name":"Superintendent","low":0,"high":0},{"name":"Temp Facilities","low":0,"high":0},{"name":"Dumpsters","low":0,"high":0},{"name":"Builder Risk","low":0,"high":0},{"name":"Contingency 5%","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
 
     // Use streaming flag so function reads full Anthropic stream before returning
     btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
