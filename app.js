@@ -195,11 +195,16 @@ DECKS ALWAYS ADD: 48-inch frost footings, ledger flashing, guard rails, snow loa
 
 Response MUST start with { and end with }. No markdown. No text outside JSON.`;
 
+    // Sanitize site analysis — strip special chars that corrupt JSON
+    const cleanAnalysis = siteAnalysis
+      ? siteAnalysis.replace(/[$"\\]/g,"").replace(/,(?=\s)/g," —").slice(0,800)
+      : "";
+
     const estimatePrompt = `Generate a conceptual budget for this Montana construction project.
 
 ZONES: ${zoneList}
 NOTES: ${appData.projectNotes||"none"}
-${siteAnalysis ? "SITE ANALYSIS:\n"+siteAnalysis : ""}
+${cleanAnalysis ? "SITE OBSERVATIONS: "+cleanAnalysis : ""}
 
 Return ONLY this JSON. MAX 6 sections total — combine related trades. Short names only. NO lineItems:
 {"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Permit","low":0,"high":0},{"name":"Engineering","low":0,"high":0},{"name":"Superintendent","low":0,"high":0},{"name":"Temp Facilities","low":0,"high":0},{"name":"Dumpsters","low":0,"high":0},{"name":"Builder Risk","low":0,"high":0},{"name":"Contingency 5%","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
@@ -246,9 +251,11 @@ Return ONLY this JSON. MAX 6 sections total — combine related trades. Short na
       result = JSON.parse(jsonStr);
     } catch(e1) {
       let fixed = jsonStr;
-      fixed = fixed.replace(/,"[^"]*$/, ""); // remove trailing partial key
-      fixed = fixed.replace(/,\d+\.?\d*$/, ""); // remove trailing partial number  
-      fixed = fixed.replace(/,\s*$/, ""); // remove trailing comma
+      // Remove trailing partial tokens
+      fixed = fixed.replace(/,\s*"[^"]*$/, "");
+      fixed = fixed.replace(/,\s*\d+\.?\d*$/, "");
+      fixed = fixed.replace(/,\s*$/, "");
+      // Close unclosed brackets
       const opens = (fixed.match(/\[/g)||[]).length;
       const closes = (fixed.match(/\]/g)||[]).length;
       const openB = (fixed.match(/\{/g)||[]).length;
@@ -257,12 +264,17 @@ Return ONLY this JSON. MAX 6 sections total — combine related trades. Short na
       for(let i=0; i<openB-closeB; i++) fixed += "}";
       try { result = JSON.parse(fixed); }
       catch(e2) {
-        // Last resort: truncate at last complete closing brace
-        const lb = fixed.lastIndexOf("}");
-        if(lb > 10){
-          try { result = JSON.parse(fixed.slice(0, lb+1)); }
-          catch(e3){ throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
-        } else { throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
+        // Walk backwards to find last valid complete object
+        let attempt = fixed;
+        for(let cut = attempt.length-1; cut > attempt.length/2; cut--){
+          if(attempt[cut] === "}"){
+            try {
+              result = JSON.parse(attempt.slice(0, cut+1));
+              break;
+            } catch(e){}
+          }
+        }
+        if(!result) throw new Error("v2-parse-error: " + cleaned.slice(0,200));
       }
     }
 
