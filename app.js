@@ -206,8 +206,8 @@ ZONES: ${zoneList}
 NOTES: ${appData.projectNotes||"none"}
 ${cleanAnalysis ? "SITE OBSERVATIONS: "+cleanAnalysis : ""}
 
-Return ONLY this compact JSON. MAX 6 sections. Short names. No lineItems. No GC breakdown:
-{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0}],"gcLow":0,"gcHigh":0,"gcMonths":1,"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"one sentence","complianceNotes":["note"]}`;
+Return ONLY this compact JSON. MAX 6 sections. Short section names only. No lineItems. No GC breakdown. No CSI codes:
+{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","low":0,"high":0}],"gcLow":0,"gcHigh":0,"gcMonths":1,"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"one sentence","complianceNotes":["note"]}`;
 
     // Use streaming flag so function reads full Anthropic stream before returning
     btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
@@ -721,37 +721,22 @@ function exportExcel(){
   rows.push(["Title", "Cost Code", "CSI Code", "Cost Type", "Quantity", "Unit", "Unit Cost"]);
 
   if(est){
-    // Trade sections with line items
+    // Trade sections — look up CSI/BT codes from our map
     (est.sections||[]).forEach(s => {
-      const csi = s.csiCode ? {csi: s.csiCode, bt: s.btCostCode||getCsiInfo(s.name).bt} : getCsiInfo(s.name);
-
-      // Group header row — no cost, just the section name
+      const csi = getCsiInfo(s.name);
       rows.push([s.name, "", "", "", "", "", ""]);
-
-      // Line items under this section
       if(s.lineItems && s.lineItems.length){
         s.lineItems.forEach(item => {
-          const qty = item.qty || 1;
-          const unit = item.unit || "LS";
-          const unitCost = item.unitCost || (qty > 0 ? Math.round(item.total / qty) : item.total);
-          rows.push([
-            "  " + item.description,  // indent to show child relationship
-            csi.bt,
-            csi.csi,
-            "Subcontractor",
-            qty,
-            unit,
-            unitCost
-          ]);
+          const qty = item.qty||1;
+          const unit = item.unit||"LS";
+          const unitCost = item.unitCost||(qty>0?Math.round(item.total/qty):item.total);
+          rows.push(["  "+item.description, csi.bt, csi.csi, "Subcontractor", qty, unit, unitCost]);
         });
       } else {
-        // Fallback if no line items — single lump sum row
-        rows.push(["  " + s.name + " (lump sum)", csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+        rows.push(["  "+s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
       }
-
-      // Section subtotal row
-      rows.push(["  SUBTOTAL — " + s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
-      rows.push(["", "", "", "", "", "", ""]);  // blank spacer
+      rows.push(["  SUBTOTAL — "+s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+      rows.push(["", "", "", "", "", "", ""]);
     });
 
     // General conditions section
