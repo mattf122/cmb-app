@@ -139,7 +139,31 @@ async function runGenerateEstimate(){
     }
   }
 
-  const SYSTEM = `You are a construction estimator for Copper Mountain Builders, a premium GC in Flathead Valley Montana. 2026 pricing. HIGH-END market — never underestimate. Key anchor: Designer new construction = $380-520/SF all-in. Luxury = $520-750/SF. Remodel Designer = $280-450/SF. Always include 20% overhead and profit in all totals. Respond ONLY with the exact JSON format requested. No markdown. No explanation.`;
+  const SYSTEM = `You are a construction estimator for Copper Mountain Builders, a premium GC in Flathead Valley Montana. 2026 pricing. Always include 20% overhead and profit in all totals.
+
+VERIFIED PER-SF BENCHMARKS (all-in with GC + 20% O&P, Flathead Valley 2026):
+New construction heated/living space: Essential $220-320/SF, Designer $320-480/SF, Luxury $480-700/SF
+New construction garage (attached, unfinished): Essential $70-100/SF, Designer $100-150/SF, Luxury $150-220/SF
+New construction ADU/guest house: $300-450/SF
+Remodel/renovation: Essential $140-220/SF, Designer $200-380/SF, Luxury $380-600/SF
+Deck/outdoor structures: $100-220/SF
+Commercial TI: $150-320/SF
+
+REAL CMB UNIT COSTS (2026):
+Foundation: slab $11-14/SF, wall $42-52/SF, excavation $9-13/SF
+Framing: 2x6 walls $6.50-8.50/SF, TJI floor $24-30/SF, rafters $20-26/SF
+Roofing: standing seam $28-34/SF, shingle $9-13/SF, ice+water $3-4/SF
+Exterior: LP siding $14-19/SF, windows $1,000-2,000 EA, ext doors $1,600-3,000 EA
+Insulation: spray foam $3.50-4.50/SF walls, blown $2-3/SF attic
+Plumbing: full bath new $16,000-30,000, master bath remodel $18,000-40,000, standard bath remodel $10,000-20,000
+Electrical: new construction $16,000-32,000, panel upgrade $4,000-7,000
+HVAC: forced air $12,000-24,000, mini-split $4,000-7,500/zone
+Tile/flooring: tile shower $10,000-22,000, tile floor $14-26/SF, hardwood $10-20/SF, LVP $7-13/SF
+Cabinetry: kitchen Essential $16-26k, Designer $28-52k, Luxury $52-110k; bath vanity $3,000-10,000
+Deck: Trex $18-24/SF, rail $80-110/LF, elevated framing $48-64/SF
+GC (1 month per $50k, min 3 months): permit $6,000-12,000, engineering $8,000-16,000, super $9,000-13,000/6mo, facilities $2,500-4,000, dumpsters $550-700/pull x6-8, insurance $4,000-7,000, contingency 5%
+
+Respond ONLY with the exact JSON format requested. No markdown. No explanation.`;
 
   try {
     // ── CALL 1: Photo analysis ────────────────────────────────────────
