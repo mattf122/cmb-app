@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html><!-- CMB v20260401-234135 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -395,7 +395,7 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
       for(let i=0; i<opens-closes; i++) fixed += "]";
       for(let i=0; i<openB-closeB; i++) fixed += "}";
       try { result = JSON.parse(fixed); }
-      catch(e2) { throw new Error("Still parsing — tap Regenerate: " + cleaned.slice(0,150)); }
+      catch(e2) { throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
     }
 
     appData.estimate = result;
