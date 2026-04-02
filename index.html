@@ -200,7 +200,7 @@ function calcRetainerSuggestion(total){
 // ── AI ──────────────────────────────────────────────────────────────
 async function callClaude(prompt, system){
   if(!apiKey) throw new Error("No API key. Tap ⚙ to add your key.");
-  const res = await fetch("/.netlify/functions/claude", {
+  const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -264,7 +264,7 @@ async function runGenerateEstimate(){
       }
       visionContent.push({type:"text", text:`Zones being estimated: ${zoneList}\n\nProvide a detailed written scope assessment that a construction estimator can use to price this project accurately. Include observed conditions, implied scope, and any cost risk factors.`});
 
-      const visionRes = await fetch("/.netlify/functions/claude", {
+      const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
           apiKey,
@@ -336,7 +336,7 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
     btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
     let raw;
     const makeEstimateCall = async (model, maxTokens) => {
-      const res = await fetch("/.netlify/functions/claude", {
+      const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
           apiKey,
@@ -477,7 +477,7 @@ Write the DESCRIPTION and IMAGE_PROMPT as instructed.`;
       // Call API with vision if photos exist, text-only if not
       let raw;
       if(msgContent.length > 1){
-        const res = await fetch("/.netlify/functions/claude", {
+        const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({
             apiKey,
