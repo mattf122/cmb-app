@@ -105,188 +105,139 @@ async function runGenerateEstimate(){
 
   const zones = appData.zones;
   const zoneList = zones.map(z =>
-    `- ${z.type}: ~${z.sqft||"unknown"} sq ft, ${z.finish} finish. Scope: ${z.notes||"standard scope"}`
+    `${z.type} | ${z.sqft||"unknown"} SF | ${z.finish} finish | ${z.notes||"standard scope"}`
   ).join("\n");
 
+  // Helper: call Claude via Cloudflare Worker
+  async function workerCall(messages, system, maxTokens=1000){
+    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens: maxTokens,
+        stream: true,
+        system,
+        messages
+      })
+    });
+    if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||"Server error "+res.status); }
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    let text = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    return text;
+  }
+
+  // Helper: parse JSON safely
+  function safeJSON(text){
+    const s = text.indexOf("{"); const e = text.lastIndexOf("}");
+    if(s===-1||e===-1) throw new Error("No JSON in response");
+    try { return JSON.parse(text.slice(s,e+1)); }
+    catch(err){
+      // Try to repair
+      let t = text.slice(s,e+1).replace(/,\s*([}\]])/g,"$1");
+      return JSON.parse(t);
+    }
+  }
+
+  const SYSTEM = `You are a construction estimator for Copper Mountain Builders, a premium GC in Flathead Valley Montana. 2026 pricing. HIGH-END market — never underestimate. Key anchor: Designer new construction = $380-520/SF all-in. Luxury = $520-750/SF. Remodel Designer = $280-450/SF. Always include 20% overhead and profit in all totals. Respond ONLY with the exact JSON format requested. No markdown. No explanation.`;
+
   try {
-    // ── CALL 1: Photo analysis with Haiku (fast) ──────────────────────
-    btn.textContent = "⏳ Analyzing site conditions…";
+    // ── CALL 1: Photo analysis ────────────────────────────────────────
+    btn.textContent = "⏳ Step 1 of 4 — Analyzing photos…";
+    let siteNotes = "";
+
     const allDocs = getAllDocs();
-    const imgDocs = allDocs.filter(d => d.type.includes("image"));
-    const docNames = allDocs.length > 0 ? allDocs.map(d=>d.name).join(", ") : "none";
-
-    let siteAnalysis = "";
-
-    // Collect photos — before photos from zones + image docs
     const photosToAnalyze = [];
     for(const zone of zones){
-      for(const photo of (zone.photosBefore||[]).slice(0,3)){
-        photosToAnalyze.push({photo, label: zone.type + " — existing condition"});
-      }
-      for(const photo of (zone.photosInspo||[]).slice(0,2)){
-        photosToAnalyze.push({photo, label: zone.type + " — client inspiration"});
-      }
+      for(const photo of (zone.photosBefore||[]).slice(0,2)) photosToAnalyze.push({photo, label:zone.type});
+      for(const photo of (zone.photosInspo||[]).slice(0,1)) photosToAnalyze.push({photo, label:zone.type+" inspiration"});
     }
-    for(const doc of imgDocs.slice(0,4)){
-      photosToAnalyze.push({photo: doc.dataUrl, label: doc.name});
-    }
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name});
 
     if(photosToAnalyze.length > 0){
-      // Build vision content array
-      const visionContent = [];
-      visionContent.push({type:"text", text:"You are a construction estimator reviewing site photos for a Montana residential/commercial project. Analyze these photos and provide a detailed scope assessment covering: existing conditions, materials, complexity factors, scope items visible, anything that affects cost. Be specific and thorough."});
-
-      for(const {photo, label} of photosToAnalyze.slice(0,15)){
-        visionContent.push({type:"text", text:`[${label}]:`});
+      const visionContent = [{type:"text", text:`Analyze these site photos for a Montana construction project. Describe existing conditions, materials, complexity, and scope items visible. Be brief — 3-4 sentences max. Zones: ${zoneList}`}];
+      for(const {photo, label} of photosToAnalyze.slice(0,8)){
         const compressed = await compressImage(photo, 600, 0.6);
+        visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
-      visionContent.push({type:"text", text:`Zones being estimated: ${zoneList}\n\nProvide a detailed written scope assessment that a construction estimator can use to price this project accurately. Include observed conditions, implied scope, and any cost risk factors.`});
-
       const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1500,
-          stream: false,
-          messages: [{role:"user", content:visionContent}]
-        })
+        body: JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:400, stream:false, messages:[{role:"user",content:visionContent}]})
       });
       if(visionRes.ok){
-        const visionData = await visionRes.json();
-        if(visionData.content && visionData.content[0]){
-          siteAnalysis = visionData.content[0].text;
-        }
+        const vd = await visionRes.json();
+        if(vd.content?.[0]?.text) siteNotes = vd.content[0].text.replace(/[$"]/g,"").slice(0,400);
       }
     }
 
-    // ── CALL 2: Full estimate with Sonnet (accurate) ──────────────────
-    btn.textContent = "⏳ Building estimate…";
+    // ── CALL 2: Zone totals ───────────────────────────────────────────
+    btn.textContent = "⏳ Step 2 of 4 — Pricing zones…";
+    const zoneRaw = await workerCall([{role:"user", content:
+      `Price each zone for this Montana project. Include 20% O&P in totals.
+Zones:
+${zoneList}
+${siteNotes?"Site observations: "+siteNotes:""}
+Notes: ${appData.projectNotes||"none"}
 
-    const estimateSystem = `You are a senior construction estimator for Copper Mountain Builders, a premium design-build GC in Flathead Valley, Montana (Kalispell/Whitefish/Bigfork area).
+Return ONLY: {"zones":[{"name":"zone name","low":0,"high":0,"notes":"brief scope note"}]}`
+    }], SYSTEM, 800);
+    const zoneResult = safeJSON(zoneRaw);
 
-CRITICAL: Northwest Montana is an EXTREMELY HIGH COST market. Labor scarce, materials trucked in, brutal winters. Price HIGH always.
+    // ── CALL 3: Trade sections ────────────────────────────────────────
+    btn.textContent = "⏳ Step 3 of 4 — Breaking out trades…";
+    const sectionRaw = await workerCall([{role:"user", content:
+      `Break this Montana construction project into trade sections. MAX 7 sections. Include 20% O&P in totals.
+Zones: ${zoneList}
+Total budget range: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))}
+${siteNotes?"Site observations: "+siteNotes:""}
 
-VERIFIED REAL PROJECT: 1,872 SF Designer new construction Columbia Falls MT = $720,000 total = $385/SF all-in. Use this as your anchor.
+Return ONLY: {"sections":[{"name":"trade name","low":0,"high":0}]}`
+    }], SYSTEM, 600);
+    const sectionResult = safeJSON(sectionRaw);
 
-REAL CMB UNIT COSTS (2026 Flathead Valley):
-Foundation: slab $12-16/SF, wall $42-55/SF, excavation $10-14/SF, site clearing $5,200-8,500 LS
-Framing: 2x6 walls $7-9/SF, TJI floor $26-32/SF, cathedral rafters $22-28/SF, ridge LVL $9,800-14,000 LS, OSB $3.20-4.50/SF
-Roofing: standing seam $28-35/SF, shingle $9-14/SF, ice+water $3.20-4.50/SF, snow guards $4,800-7,500 LS
-Exterior: LP siding $14-20/SF, windows $1,050-2,200 EA, ext doors $1,650-3,200 EA, garage doors $3,400-5,500 EA
-Insulation: spray foam walls $3.50-5/SF, blown attic $2.20-3.50/SF (R-21 walls, R-49 ceiling required)
-Plumbing: full bath new $18,000-35,000, master bath remodel $22,000-45,000, standard bath remodel $12,000-22,000
-Electrical: new construction $18,000-35,000, panel upgrade $4,500-7,500, kitchen $4,000-9,000, bath $2,500-5,500
-HVAC: forced air $14,000-26,000, mini-split/zone $4,500-8,000, radiant $22-35/SF, HRV $4,200-6,500
-Tile/flooring: tile shower $12,000-25,000, tile floor $15-28/SF, hardwood $12-22/SF, LVP $8-14/SF
-Cabinetry: kitchen Essential $18-28k / Designer $32-58k / Luxury $58-120k+; bath vanity $3,500-12,000
-Deck: Trex $19-26/SF, aluminum rail $85-120/LF, elevated framing $52-68/SF, footings $1,000-1,800 EA
-Drywall: $5-7.50/SF, int doors $950-1,800 EA, trim $4.50-7/LF, paint $3.50-6/SF
-GC (1 month per $50k, min 3 months): permit $6,500-14,000, engineering $9,500-18,000, super $9,500-14,000/6mo, temp facilities $2,800-4,500, toilets $2,400-3,600, dumpsters $650/pull x6-10, builder risk $4,200-7,500, temp fence $1,800-3,500, cleaning $1,600-3,200, contingency 5%
+    // ── CALL 4: GC + totals ───────────────────────────────────────────
+    btn.textContent = "⏳ Step 4 of 4 — Calculating totals…";
+    const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+z.low,  0);
+    const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+z.high, 0);
+    const gcRaw = await workerCall([{role:"user", content:
+      `Calculate general conditions and final totals for this Montana construction project.
+Project subtotal: ${fmt$(subtotalLow)} – ${fmt$(subtotalHigh)}
+Zones: ${zoneList}
+Duration: 1 month per $50k of cost (minimum 3 months)
 
-PER-SF ALL-IN BENCHMARKS (GC + 20% O&P included):
-New construction Essential $320-400/SF, Designer $380-520/SF, Luxury $520-750/SF
-Remodel Essential $180-280/SF, Designer $280-450/SF, Luxury $450-750/SF
-Deck $120-280/SF, ADU $350-550/SF, Commercial TI $180-380/SF
+Return ONLY:
+{"gcLow":0,"gcHigh":0,"gcMonths":1,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"2 sentence project summary","complianceNotes":["key code or contractor item to flag"]}`
+    }], SYSTEM, 600);
+    const gcResult = safeJSON(gcRaw);
 
-ALWAYS INCLUDE: engineering stamp, GC costs, 5% contingency, 20% O&P on everything.
-BATHROOMS ALWAYS ADD: demo, cement board, Schluter waterproofing, 80CFM fan, GFCI, shutoffs, access panel, drywall/paint.
-DECKS ALWAYS ADD: 48-inch frost footings, ledger flashing, guard rails, snow load engineering.
-
-Response MUST start with { and end with }. No markdown. No text outside JSON.`;
-
-    // Sanitize site analysis — strip special chars that corrupt JSON
-    const cleanAnalysis = siteAnalysis
-      ? siteAnalysis.replace(/[$"\\]/g,"").replace(/,(?=\s)/g," —").slice(0,800)
-      : "";
-
-    const estimatePrompt = `Generate a conceptual budget for this Montana construction project.
-
-ZONES: ${zoneList}
-NOTES: ${appData.projectNotes||"none"}
-${cleanAnalysis ? "SITE OBSERVATIONS: "+cleanAnalysis : ""}
-
-Return ONLY this compact JSON. MAX 6 sections. Short section names only. No lineItems. No GC breakdown. No CSI codes:
-{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","low":0,"high":0}],"gcLow":0,"gcHigh":0,"gcMonths":1,"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"one sentence","complianceNotes":["note"]}`;
-
-    // Use streaming flag so function reads full Anthropic stream before returning
-    btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
-    let raw;
-    const makeEstimateCall = async (model, maxTokens) => {
-      const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          stream: true,
-          system: estimateSystem,
-          messages: [{role:"user", content:estimatePrompt}]
-        })
-      });
-      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+res.status); }
-      const data = await res.json();
-      if(data.error) throw new Error(data.error.message);
-      return data.content[0].text;
+    // ── Combine results ───────────────────────────────────────────────
+    const estimate = {
+      zones:              zoneResult.zones,
+      sections:           sectionResult.sections,
+      gcLow:              gcResult.gcLow,
+      gcHigh:             gcResult.gcHigh,
+      gcMonths:           gcResult.gcMonths,
+      subtotalLow,
+      subtotalHigh,
+      overheadProfitLow:  gcResult.overheadProfitLow,
+      overheadProfitHigh: gcResult.overheadProfitHigh,
+      totalLow:           gcResult.totalLow,
+      totalHigh:          gcResult.totalHigh,
+      summary:            gcResult.summary,
+      complianceNotes:    gcResult.complianceNotes
     };
 
-    try {
-      raw = await makeEstimateCall("claude-sonnet-4-6", 16000);
-    } catch(e1) {
-      btn.textContent = "⏳ Retrying with backup model…";
-      try {
-        raw = await makeEstimateCall("claude-haiku-4-5-20251001", 8192);
-      } catch(e2) {
-        throw new Error(e2.message || e1.message);
-      }
-    }
-
-    // Strip markdown fences if present
-    let cleaned = raw.replace(/```json/g,"").replace(/```/g,"").trim();
-    // Parse JSON with auto-fix for truncation
-    const start = cleaned.indexOf("{");
-    if(start===-1) throw new Error("No JSON returned. Response: " + raw.slice(0,100));
-    let jsonStr = cleaned.slice(start);
-    let result;
-    try {
-      result = JSON.parse(jsonStr);
-    } catch(e1) {
-      let fixed = jsonStr;
-      // Remove trailing partial tokens
-      fixed = fixed.replace(/,\s*"[^"]*$/, "");
-      fixed = fixed.replace(/,\s*\d+\.?\d*$/, "");
-      fixed = fixed.replace(/,\s*$/, "");
-      // Close unclosed brackets
-      const opens = (fixed.match(/\[/g)||[]).length;
-      const closes = (fixed.match(/\]/g)||[]).length;
-      const openB = (fixed.match(/\{/g)||[]).length;
-      const closeB = (fixed.match(/\}/g)||[]).length;
-      for(let i=0; i<opens-closes; i++) fixed += "]";
-      for(let i=0; i<openB-closeB; i++) fixed += "}";
-      try { result = JSON.parse(fixed); }
-      catch(e2) {
-        // Walk backwards to find last valid complete object
-        let attempt = fixed;
-        for(let cut = attempt.length-1; cut > attempt.length/2; cut--){
-          if(attempt[cut] === "}"){
-            try {
-              result = JSON.parse(attempt.slice(0, cut+1));
-              break;
-            } catch(e){}
-          }
-        }
-        if(!result) throw new Error("v2-parse-error: " + cleaned.slice(0,200));
-      }
-    }
-
-    appData.estimate = result;
-    const suggested = calcRetainerSuggestion(result.totalLow);
+    appData.estimate = estimate;
+    const suggested = calcRetainerSuggestion(estimate.totalLow);
     if(!appData.retainerAmount) appData.retainerAmount = suggested;
     render();
 
   } catch(e){
     err.textContent = "Error: " + e.message;
     err.classList.remove("hidden");
-    btn.disabled = false; btn.textContent = "✦ Generate AI Estimate";
+    btn.disabled = false;
+    btn.textContent = "✦ Generate AI Estimate";
   }
 }
 
