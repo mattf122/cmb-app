@@ -29,8 +29,10 @@ let appData = {
 };
 
 // ── Settings ────────────────────────────────────────────────────────
+
+
 function showSettings(){
-  // API key managed server-side
+
   const m = document.getElementById("settings-modal");
   m.style.display = "flex";
 }
