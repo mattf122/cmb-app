@@ -270,6 +270,7 @@ async function runGenerateEstimate(){
           apiKey,
           model: "claude-haiku-4-5-20251001",
           max_tokens: 1500,
+          stream: false,
           messages: [{role:"user", content:visionContent}]
         })
       });
@@ -284,67 +285,37 @@ async function runGenerateEstimate(){
     // ── CALL 2: Full estimate with Sonnet (accurate) ──────────────────
     btn.textContent = "⏳ Building estimate…";
 
-    const estimateSystem = `You are a senior construction estimator with 30 years experience building premium residential and commercial projects in Northwest Montana (Flathead Valley — Kalispell, Whitefish, Bigfork, Columbia Falls). You work exclusively for Copper Mountain Builders, a high-end design-build firm.
+    const estimateSystem = `You are a senior construction estimator for Copper Mountain Builders, a premium design-build GC in Flathead Valley, Montana (Kalispell/Whitefish/Bigfork area).
 
-CRITICAL PRICING CONTEXT:
-Northwest Montana is an EXTREMELY HIGH COST construction market. Labor is scarce, materials must be trucked in, winters are brutal, and the market is saturated with wealthy buyers demanding premium quality. A project that costs $300/SF in Denver costs $500-650/SF here. Never underestimate. When in doubt, price HIGH.
+CRITICAL: Northwest Montana is an EXTREMELY HIGH COST market. Labor scarce, materials trucked in, brutal winters. Price HIGH always.
 
-VERIFIED REAL CMB PROJECT DATA — use these as your anchors:
-- 1,872 SF garage/living space new construction (Designer finish, standing seam, Columbia Falls MT): $720,000 total = $385/SF all-in
-- This means Designer new construction in Flathead Valley runs $380-450/SF heated area all-in including GC and 20% O&P
-- Luxury finish adds 30-40% on top of Designer
+VERIFIED REAL PROJECT: 1,872 SF Designer new construction Columbia Falls MT = $720,000 total = $385/SF all-in. Use this as your anchor.
 
 REAL CMB UNIT COSTS (2026 Flathead Valley):
-SITE & FOUNDATION: Site clearing $5,200-8,500 LS, Excavation $9.50-14/SF, Foundation wall $42-55/SF, Concrete slab $11.50-16/SF, Foundation drainage $5,200 LS, Anchor bolts/sill plates $1,800 LS
-FRAMING: 2x6 exterior walls $6.50-9/SF, TJI floor system $26-32/SF, Cathedral rafter system $22-28/SF, Ridge beam LVL $9,800-14,000 LS, Deck framing elevated $52-65/SF, OSB sheathing $3.20-4.50/SF, Misc hardware $3,500 LS
-ROOFING: Standing seam metal $28-35/SF (Montana standard — snow/ice critical), Architectural shingle $9-14/SF, Ice & water shield $3.20-4.50/SF, Snow guards $4,800-7,500 LS, Soffit/fascia metal $9.50-12/LF
-EXTERIOR: LP SmartSide siding $14-20/SF installed, House wrap $1.80-2.50/SF, Windows double-pane low-e $1,050-2,200 EA, Exterior doors fiberglass $1,650-3,200 EA, Garage doors insulated $3,400-5,500 EA
-INSULATION: Spray foam walls $3.50-5/SF, Blown-in attic $2.20-3.50/SF, Rigid under slab $1.80-2.80/SF — Montana energy code R-21 walls, R-49 ceiling, R-30 floor MINIMUM
-PLUMBING: Full bath new construction $18,000-35,000, Master bath remodel $22,000-45,000, Standard bath remodel $12,000-22,000, Rough-in only $8,000-15,000, Water heater $2,800-4,500
-ELECTRICAL: Full house new construction $18,000-35,000, Panel 200A upgrade $4,500-7,500, Kitchen remodel $4,000-9,000, Bath remodel $2,500-5,500, EV charger rough-in $1,200-2,200
-HVAC: Forced air system $14,000-26,000, Mini-split per zone $4,500-8,000, Radiant in-floor $22-35/SF, HRV ventilation $4,200-6,500, Propane tank/line $3,200-5,500
-TILE & FLOORING: Custom tile shower $12,000-25,000, Tile floor installed $15-28/SF, Hardwood installed $12-22/SF, LVP installed $8-14/SF, Carpet $5-9/SF
-CABINETRY & MILLWORK: Kitchen Essential $18,000-28,000 / Designer $32,000-58,000 / Luxury $58,000-120,000+; Bath vanity $3,500-12,000; Built-ins $180-350/LF
-DECK & OUTDOOR: Composite Trex decking $19-26/SF, Aluminum railing $85-120/LF, Elevated framing $52-68/SF, Concrete footings 48-inch frost line $1,000-1,800 EA (6-10 footings typical), Exterior stairs $9,800-16,000 LS
-INTERIOR FINISHES: Drywall hang/tape/texture $5.00-7.50/SF, Interior doors $950-1,800 EA, Interior trim $4.50-7/LF, Interior paint $3.50-6/SF
-GENERAL CONDITIONS (1 month per $50k base cost, minimum 3 months):
-  Building permit Flathead County $6,500-14,000 (% of valuation)
-  Structural/architectural engineering $9,500-18,000
-  Project superintendent $9,500-14,000 per 6-month period
-  Temp power, water, site facilities $2,800-4,500
-  Portable toilets $2,400-3,600 for project duration
-  Dumpsters $600-750/pull, estimate 6-10 pulls
-  Builder risk insurance $4,200-7,500
-  Temp fencing & site security $1,800-3,500
-  Final cleaning $1,600-3,200
-  5% contingency on ALL direct costs
+Foundation: slab $12-16/SF, wall $42-55/SF, excavation $10-14/SF, site clearing $5,200-8,500 LS
+Framing: 2x6 walls $7-9/SF, TJI floor $26-32/SF, cathedral rafters $22-28/SF, ridge LVL $9,800-14,000 LS, OSB $3.20-4.50/SF
+Roofing: standing seam $28-35/SF, shingle $9-14/SF, ice+water $3.20-4.50/SF, snow guards $4,800-7,500 LS
+Exterior: LP siding $14-20/SF, windows $1,050-2,200 EA, ext doors $1,650-3,200 EA, garage doors $3,400-5,500 EA
+Insulation: spray foam walls $3.50-5/SF, blown attic $2.20-3.50/SF (R-21 walls, R-49 ceiling required)
+Plumbing: full bath new $18,000-35,000, master bath remodel $22,000-45,000, standard bath remodel $12,000-22,000
+Electrical: new construction $18,000-35,000, panel upgrade $4,500-7,500, kitchen $4,000-9,000, bath $2,500-5,500
+HVAC: forced air $14,000-26,000, mini-split/zone $4,500-8,000, radiant $22-35/SF, HRV $4,200-6,500
+Tile/flooring: tile shower $12,000-25,000, tile floor $15-28/SF, hardwood $12-22/SF, LVP $8-14/SF
+Cabinetry: kitchen Essential $18-28k / Designer $32-58k / Luxury $58-120k+; bath vanity $3,500-12,000
+Deck: Trex $19-26/SF, aluminum rail $85-120/LF, elevated framing $52-68/SF, footings $1,000-1,800 EA
+Drywall: $5-7.50/SF, int doors $950-1,800 EA, trim $4.50-7/LF, paint $3.50-6/SF
+GC (1 month per $50k, min 3 months): permit $6,500-14,000, engineering $9,500-18,000, super $9,500-14,000/6mo, temp facilities $2,800-4,500, toilets $2,400-3,600, dumpsters $650/pull x6-10, builder risk $4,200-7,500, temp fence $1,800-3,500, cleaning $1,600-3,200, contingency 5%
 
-ACCURATE PER-SF ALL-IN BENCHMARKS (Flathead Valley 2026, includes GC + 20% O&P):
-NEW CONSTRUCTION:
-  Essential (builder grade): $320-400/SF heated
-  Designer (elevated finishes, custom details): $380-520/SF heated  
-  Luxury (top of market, bespoke): $520-750/SF heated
-REMODEL/RENOVATION:
-  Essential: $180-280/SF affected area
-  Designer: $280-450/SF affected area
-  Luxury: $450-750/SF affected area
-DECK/OUTDOOR STRUCTURES: $120-280/SF
-ADU/GUEST HOUSE: $350-550/SF
-COMMERCIAL/TENANT IMPROVEMENT: $180-380/SF
+PER-SF ALL-IN BENCHMARKS (GC + 20% O&P included):
+New construction Essential $320-400/SF, Designer $380-520/SF, Luxury $520-750/SF
+Remodel Essential $180-280/SF, Designer $280-450/SF, Luxury $450-750/SF
+Deck $120-280/SF, ADU $350-550/SF, Commercial TI $180-380/SF
 
-ALWAYS INCLUDE IN EVERY ESTIMATE:
-- General conditions scaled to project size and duration
-- Structural engineering stamp for any new construction, additions, or wall removals ($2,500-18,000)
-- 5% contingency on direct costs
-- 20% overhead and profit on everything
+ALWAYS INCLUDE: engineering stamp, GC costs, 5% contingency, 20% O&P on everything.
+BATHROOMS ALWAYS ADD: demo, cement board, Schluter waterproofing, 80CFM fan, GFCI, shutoffs, access panel, drywall/paint.
+DECKS ALWAYS ADD: 48-inch frost footings, ledger flashing, guard rails, snow load engineering.
 
-MONTANA CODE — ALWAYS PRICE IN:
-- Bathroom remodels: demo/haul, cement board, Schluter KERDI waterproofing, 80CFM exhaust fan, GFCI, shut-off valves, access panel, drywall/paint touchup
-- All decks: 48-inch frost line footings (NON-NEGOTIABLE in Montana), ledger flashing per IRC, guard rails 36-42 inches, lateral load connections, snow load engineering
-- New construction: IRC 2021 compliance, R-21 walls minimum, R-49 ceiling, energy heel trusses or raised heel rafters
-- Pre-1980 homes: flag asbestos ($450-800 test) and lead paint ($300-500 test) — price remediation allowance
-
-Your response MUST start with { and end with }. Never use markdown. Never add text before or after the JSON object.`;
+Response MUST start with { and end with }. No markdown. No text outside JSON.`;
 
     const estimatePrompt = `Generate a detailed conceptual budget for this Montana construction project.
 
@@ -361,40 +332,36 @@ CRITICAL: Start response with { end with }. No markdown fences, no explanation. 
 Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section:
 {"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"string","low":0,"high":0,"lineItems":[{"description":"string","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"string","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
+    // Use streaming flag so function reads full Anthropic stream before returning
+    btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
     let raw;
+    const makeEstimateCall = async (model, maxTokens) => {
+      const res = await fetch("/.netlify/functions/claude", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          apiKey,
+          model,
+          max_tokens: maxTokens,
+          stream: true,
+          system: estimateSystem,
+          messages: [{role:"user", content:estimatePrompt}]
+        })
+      });
+      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+res.status); }
+      const data = await res.json();
+      if(data.error) throw new Error(data.error.message);
+      return data.content[0].text;
+    };
+
     try {
-      // Try Sonnet first
-      const sonnetRes = await fetch("/.netlify/functions/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          apiKey,
-          model: "claude-sonnet-4-6",
-          max_tokens: 6000,
-          system: estimateSystem,
-          messages: [{role:"user", content:estimatePrompt}]
-        })
-      });
-      if(!sonnetRes.ok) throw new Error("Sonnet error: " + sonnetRes.status);
-      const sonnetData = await sonnetRes.json();
-      if(sonnetData.error) throw new Error(sonnetData.error.message);
-      raw = sonnetData.content[0].text;
-    } catch(sonnetErr) {
-      // Fall back to Haiku
-      btn.textContent = "⏳ Retrying…";
-      const haikuRes = await fetch("/.netlify/functions/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          apiKey,
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 5000,
-          system: estimateSystem,
-          messages: [{role:"user", content:estimatePrompt}]
-        })
-      });
-      if(!haikuRes.ok){ const e=await haikuRes.json().catch(()=>({})); throw new Error((e.error?.message)||"Server error "+haikuRes.status); }
-      const haikuData = await haikuRes.json();
-      if(haikuData.error) throw new Error(haikuData.error.message);
-      raw = haikuData.content[0].text;
+      raw = await makeEstimateCall("claude-sonnet-4-6", 8000);
+    } catch(e1) {
+      btn.textContent = "⏳ Retrying with backup model…";
+      try {
+        raw = await makeEstimateCall("claude-haiku-4-5-20251001", 6000);
+      } catch(e2) {
+        throw new Error(e2.message || e1.message);
+      }
     }
 
     // Strip markdown fences if present
