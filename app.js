@@ -206,8 +206,8 @@ ZONES: ${zoneList}
 NOTES: ${appData.projectNotes||"none"}
 ${cleanAnalysis ? "SITE OBSERVATIONS: "+cleanAnalysis : ""}
 
-Return ONLY this JSON. MAX 6 sections total — combine related trades. Short names only. NO lineItems:
-{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Permit","low":0,"high":0},{"name":"Engineering","low":0,"high":0},{"name":"Superintendent","low":0,"high":0},{"name":"Temp Facilities","low":0,"high":0},{"name":"Dumpsters","low":0,"high":0},{"name":"Builder Risk","low":0,"high":0},{"name":"Contingency 5%","low":0,"high":0}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
+Return ONLY this compact JSON. MAX 6 sections. Short names. No lineItems. No GC breakdown:
+{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0}],"gcLow":0,"gcHigh":0,"gcMonths":1,"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"one sentence","complianceNotes":["note"]}`;
 
     // Use streaming flag so function reads full Anthropic stream before returning
     btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
@@ -755,23 +755,17 @@ function exportExcel(){
     });
 
     // General conditions section
-    if(est.generalConditions){
-      rows.push(["General Conditions", "", "", "", "", "", ""]);
-      (est.generalConditions.items||[]).forEach(item => {
+    const gcHigh = est.gcHigh || est.generalConditions?.high || 0;
+    const gcItems = est.generalConditions?.items || [];
+    rows.push(["General Conditions", "", "", "", "", "", ""]);
+    if(gcItems.length){
+      gcItems.forEach(item => {
         const csi = getCsiInfo(item.name);
-        rows.push([
-          "  " + item.name,
-          csi.bt,
-          csi.csi,
-          "Other",
-          item.qty || 1,
-          item.unit || "LS",
-          item.high
-        ]);
+        rows.push(["  "+item.name, csi.bt, csi.csi, "Other", item.qty||1, item.unit||"LS", item.high||0]);
       });
-      rows.push(["  SUBTOTAL — General Conditions", "General Conditions", "01 00 00", "Other", 1, "LS", est.generalConditions.high]);
-      rows.push(["", "", "", "", "", "", ""]);
     }
+    rows.push(["  General Conditions Total", "General Conditions", "01 00 00", "Other", 1, "LS", gcHigh]);
+    rows.push(["", "", "", "", "", "", ""]);
 
     // Overhead & Profit — internal line
     rows.push(["Overhead & Profit (20%) — INTERNAL", "General Conditions", "01 00 00", "Other", 1, "LS", est.overheadProfitHigh||0]);
@@ -1085,16 +1079,19 @@ function renderEstimate(){
         </div>
       `).join("")}
     </div>`:""}
-    ${est.generalConditions?`
+    ${(est.gcLow||est.generalConditions)?`
     <div class="card">
-      <div class="section-title">General Conditions (${est.generalConditions.months||1} month${(est.generalConditions.months||1)>1?"s":""})</div>
-      ${(est.generalConditions.items||[]).map(item=>`
+      <div class="section-title">General Conditions (${est.gcMonths||est.generalConditions?.months||1} month${(est.gcMonths||est.generalConditions?.months||1)>1?"s":""})</div>
+      ${(est.generalConditions?.items||[]).map(item=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
           <span style="font-size:12px;color:var(--cream-dk);">${esc(item.name)}</span>
-          <span style="font-size:12px;color:var(--cream);">${item.qty||1} ${esc(item.unit||"LS")} — ${fmt$(item.low)} – ${fmt$(item.high)}</span>
+          <span style="font-size:12px;color:var(--cream);">${fmt$(item.low)} – ${fmt$(item.high)}</span>
         </div>
       `).join("")}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Subtotal</span><span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.generalConditions.low)} – ${fmt$(est.generalConditions.high)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;">
+        <span style="font-size:13px;font-weight:bold;color:var(--copper-lt);">GC Total</span>
+        <span style="font-size:13px;color:var(--copper-lt);font-weight:bold;">${fmt$(est.gcLow||est.generalConditions?.low||0)} – ${fmt$(est.gcHigh||est.generalConditions?.high||0)}</span>
+      </div>
     </div>`:""}
 
     <div class="card">
