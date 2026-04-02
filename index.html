@@ -354,11 +354,11 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
     };
 
     try {
-      raw = await makeEstimateCall("claude-sonnet-4-6", 8000);
+      raw = await makeEstimateCall("claude-sonnet-4-6", 16000);
     } catch(e1) {
       btn.textContent = "⏳ Retrying with backup model…";
       try {
-        raw = await makeEstimateCall("claude-haiku-4-5-20251001", 6000);
+        raw = await makeEstimateCall("claude-haiku-4-5-20251001", 8192);
       } catch(e2) {
         throw new Error(e2.message || e1.message);
       }
