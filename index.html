@@ -284,47 +284,67 @@ async function runGenerateEstimate(){
     // ── CALL 2: Full estimate with Sonnet (accurate) ──────────────────
     btn.textContent = "⏳ Building estimate…";
 
-    const estimateSystem = `You are an expert construction estimator for Copper Mountain Builders, a premium design-build GC in Flathead Valley, Montana. You produce detailed conceptual budgets for residential, commercial, and government projects.
+    const estimateSystem = `You are a senior construction estimator with 30 years experience building premium residential and commercial projects in Northwest Montana (Flathead Valley — Kalispell, Whitefish, Bigfork, Columbia Falls). You work exclusively for Copper Mountain Builders, a high-end design-build firm.
 
-PRICING RULES — NON-NEGOTIABLE:
-- All pricing reflects 2026 Northwest Montana (Kalispell/Flathead Valley) market rates
-- CMB is a HIGH-END premium contractor — never use national averages or budget pricing
-- Apply 20% overhead and profit to ALL costs including general conditions
-- LOW range = lean execution with standard selections
-- HIGH range = premium selections, full contingency, worst-case site conditions (HIGH should be 40-60% above LOW)
+CRITICAL PRICING CONTEXT:
+Northwest Montana is an EXTREMELY HIGH COST construction market. Labor is scarce, materials must be trucked in, winters are brutal, and the market is saturated with wealthy buyers demanding premium quality. A project that costs $300/SF in Denver costs $500-650/SF here. Never underestimate. When in doubt, price HIGH.
 
-REAL CMB UNIT COSTS:
-Foundation: slab $11.50/SF, wall $42/SF, excavation $9.50/SF
-Framing: 2x6 walls $6.50/SF, TJI floor $26/SF, cathedral rafters $22/SF, ridge LVL $9,800 LS
-Roofing: standing seam $28-30/SF, architectural shingle $9-12/SF, ice+water $3.20/SF
-Plumbing: master bath $18,000-35,000, standard bath $12,000-22,000, new rough-in $8,000-15,000
-Electrical: full rewire $15,000-35,000, panel upgrade $3,500-6,000, kitchen $4,000-8,000, bath $2,500-4,500
-HVAC: forced air $12,000-22,000, mini-split/zone $3,500-6,000, radiant floor $18-28/SF
-Tile/flooring: shower tile $8,000-18,000, tile floor $12-22/SF, hardwood $10-18/SF, LVP $6-10/SF
-Cabinetry: kitchen Essential $15-25k / Designer $25-45k / Luxury $45-90k; bath vanity $2,500-8,000
-Deck: composite Trex $19/SF, aluminum rail $85/LF, elevated framing $52/SF, footings $800-1,200 EA
-General Conditions (scale by 1 month per $50k base cost):
-  Permit Flathead County $6,500-12,000
-  Superintendent $9,500 per 6 months
-  Temp power/water $2,800
-  Dumpsters $600/pull (est 4-8 pulls)
-  Builder risk insurance $4,200
-  Temp fencing $1,800
-  Final cleaning $1,600
-  5% contingency on direct costs
+VERIFIED REAL CMB PROJECT DATA — use these as your anchors:
+- 1,872 SF garage/living space new construction (Designer finish, standing seam, Columbia Falls MT): $720,000 total = $385/SF all-in
+- This means Designer new construction in Flathead Valley runs $380-450/SF heated area all-in including GC and 20% O&P
+- Luxury finish adds 30-40% on top of Designer
 
-PER-SF BENCHMARKS (all-in with GC + 20% O&P):
-New construction: Essential $220-280/SF, Designer $280-380/SF, Luxury $380-550/SF
-Remodel: Essential $150-220/SF, Designer $220-350/SF, Luxury $350-600/SF
-Deck/outdoor: $85-200/SF | ADU: $250-400/SF
+REAL CMB UNIT COSTS (2026 Flathead Valley):
+SITE & FOUNDATION: Site clearing $5,200-8,500 LS, Excavation $9.50-14/SF, Foundation wall $42-55/SF, Concrete slab $11.50-16/SF, Foundation drainage $5,200 LS, Anchor bolts/sill plates $1,800 LS
+FRAMING: 2x6 exterior walls $6.50-9/SF, TJI floor system $26-32/SF, Cathedral rafter system $22-28/SF, Ridge beam LVL $9,800-14,000 LS, Deck framing elevated $52-65/SF, OSB sheathing $3.20-4.50/SF, Misc hardware $3,500 LS
+ROOFING: Standing seam metal $28-35/SF (Montana standard — snow/ice critical), Architectural shingle $9-14/SF, Ice & water shield $3.20-4.50/SF, Snow guards $4,800-7,500 LS, Soffit/fascia metal $9.50-12/LF
+EXTERIOR: LP SmartSide siding $14-20/SF installed, House wrap $1.80-2.50/SF, Windows double-pane low-e $1,050-2,200 EA, Exterior doors fiberglass $1,650-3,200 EA, Garage doors insulated $3,400-5,500 EA
+INSULATION: Spray foam walls $3.50-5/SF, Blown-in attic $2.20-3.50/SF, Rigid under slab $1.80-2.80/SF — Montana energy code R-21 walls, R-49 ceiling, R-30 floor MINIMUM
+PLUMBING: Full bath new construction $18,000-35,000, Master bath remodel $22,000-45,000, Standard bath remodel $12,000-22,000, Rough-in only $8,000-15,000, Water heater $2,800-4,500
+ELECTRICAL: Full house new construction $18,000-35,000, Panel 200A upgrade $4,500-7,500, Kitchen remodel $4,000-9,000, Bath remodel $2,500-5,500, EV charger rough-in $1,200-2,200
+HVAC: Forced air system $14,000-26,000, Mini-split per zone $4,500-8,000, Radiant in-floor $22-35/SF, HRV ventilation $4,200-6,500, Propane tank/line $3,200-5,500
+TILE & FLOORING: Custom tile shower $12,000-25,000, Tile floor installed $15-28/SF, Hardwood installed $12-22/SF, LVP installed $8-14/SF, Carpet $5-9/SF
+CABINETRY & MILLWORK: Kitchen Essential $18,000-28,000 / Designer $32,000-58,000 / Luxury $58,000-120,000+; Bath vanity $3,500-12,000; Built-ins $180-350/LF
+DECK & OUTDOOR: Composite Trex decking $19-26/SF, Aluminum railing $85-120/LF, Elevated framing $52-68/SF, Concrete footings 48-inch frost line $1,000-1,800 EA (6-10 footings typical), Exterior stairs $9,800-16,000 LS
+INTERIOR FINISHES: Drywall hang/tape/texture $5.00-7.50/SF, Interior doors $950-1,800 EA, Interior trim $4.50-7/LF, Interior paint $3.50-6/SF
+GENERAL CONDITIONS (1 month per $50k base cost, minimum 3 months):
+  Building permit Flathead County $6,500-14,000 (% of valuation)
+  Structural/architectural engineering $9,500-18,000
+  Project superintendent $9,500-14,000 per 6-month period
+  Temp power, water, site facilities $2,800-4,500
+  Portable toilets $2,400-3,600 for project duration
+  Dumpsters $600-750/pull, estimate 6-10 pulls
+  Builder risk insurance $4,200-7,500
+  Temp fencing & site security $1,800-3,500
+  Final cleaning $1,600-3,200
+  5% contingency on ALL direct costs
 
-MONTANA CODE REQUIREMENTS TO PRICE IN:
-- Bathroom remodels: always include demo/haul, cement board, Schluter waterproofing, 80CFM exhaust fan, GFCI, shut-off valves, access panel, drywall/paint
-- Decks: 48-inch frost line footings (non-negotiable), ledger flashing, guard rails, snow load engineering stamp
-- Any structural work: engineering stamp $2,500-4,500
-- Pre-1980 homes: flag asbestos/lead testing
+ACCURATE PER-SF ALL-IN BENCHMARKS (Flathead Valley 2026, includes GC + 20% O&P):
+NEW CONSTRUCTION:
+  Essential (builder grade): $320-400/SF heated
+  Designer (elevated finishes, custom details): $380-520/SF heated  
+  Luxury (top of market, bespoke): $520-750/SF heated
+REMODEL/RENOVATION:
+  Essential: $180-280/SF affected area
+  Designer: $280-450/SF affected area
+  Luxury: $450-750/SF affected area
+DECK/OUTDOOR STRUCTURES: $120-280/SF
+ADU/GUEST HOUSE: $350-550/SF
+COMMERCIAL/TENANT IMPROVEMENT: $180-380/SF
 
-Respond ONLY with valid JSON. No markdown. Start with { end with }.`;
+ALWAYS INCLUDE IN EVERY ESTIMATE:
+- General conditions scaled to project size and duration
+- Structural engineering stamp for any new construction, additions, or wall removals ($2,500-18,000)
+- 5% contingency on direct costs
+- 20% overhead and profit on everything
+
+MONTANA CODE — ALWAYS PRICE IN:
+- Bathroom remodels: demo/haul, cement board, Schluter KERDI waterproofing, 80CFM exhaust fan, GFCI, shut-off valves, access panel, drywall/paint touchup
+- All decks: 48-inch frost line footings (NON-NEGOTIABLE in Montana), ledger flashing per IRC, guard rails 36-42 inches, lateral load connections, snow load engineering
+- New construction: IRC 2021 compliance, R-21 walls minimum, R-49 ceiling, energy heel trusses or raised heel rafters
+- Pre-1980 homes: flag asbestos ($450-800 test) and lead paint ($300-500 test) — price remediation allowance
+
+Your response MUST start with { and end with }. Never use markdown. Never add text before or after the JSON object.`;
 
     const estimatePrompt = `Generate a detailed conceptual budget for this Montana construction project.
 
@@ -349,7 +369,7 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
         body: JSON.stringify({
           apiKey,
           model: "claude-sonnet-4-6",
-          max_tokens: 4000,
+          max_tokens: 6000,
           system: estimateSystem,
           messages: [{role:"user", content:estimatePrompt}]
         })
@@ -366,7 +386,7 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
         body: JSON.stringify({
           apiKey,
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 3000,
+          max_tokens: 5000,
           system: estimateSystem,
           messages: [{role:"user", content:estimatePrompt}]
         })
@@ -387,7 +407,10 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
     try {
       result = JSON.parse(jsonStr);
     } catch(e1) {
-      let fixed = jsonStr.replace(/,\s*$/, "");
+      let fixed = jsonStr;
+      fixed = fixed.replace(/,"[^"]*$/, ""); // remove trailing partial key
+      fixed = fixed.replace(/,\d+\.?\d*$/, ""); // remove trailing partial number  
+      fixed = fixed.replace(/,\s*$/, ""); // remove trailing comma
       const opens = (fixed.match(/\[/g)||[]).length;
       const closes = (fixed.match(/\]/g)||[]).length;
       const openB = (fixed.match(/\{/g)||[]).length;
@@ -395,7 +418,14 @@ Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per
       for(let i=0; i<opens-closes; i++) fixed += "]";
       for(let i=0; i<openB-closeB; i++) fixed += "}";
       try { result = JSON.parse(fixed); }
-      catch(e2) { throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
+      catch(e2) {
+        // Last resort: truncate at last complete closing brace
+        const lb = fixed.lastIndexOf("}");
+        if(lb > 10){
+          try { result = JSON.parse(fixed.slice(0, lb+1)); }
+          catch(e3){ throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
+        } else { throw new Error("v2-parse-error: " + cleaned.slice(0,200)); }
+      }
     }
 
     appData.estimate = result;
