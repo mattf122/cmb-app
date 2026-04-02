@@ -105,7 +105,7 @@ async function runGenerateEstimate(){
 
   const zones = appData.zones;
   const zoneList = zones.map(z =>
-    `${z.type} | ${z.sqft||"unknown"} SF | ${z.finish} finish | ${z.notes||"standard scope"}`
+    `${z.type} | ${z.sqft||"unknown"} SF | Designer finish | ${z.notes||"standard scope"}`
   ).join("\n");
 
   // Helper: call Claude via Cloudflare Worker
@@ -322,7 +322,7 @@ IMAGE_PROMPT: [your detailed image generation prompt here]`;
       // Add text context
       const contextText = `
 Zone type: ${zone.type}
-Finish level: ${zone.finish}
+Finish level: Designer
 Scope of work: ${zone.notes||"Standard scope remodel"}
 ${appData.projectNotes?"Overall project notes: "+appData.projectNotes:""}
 ${zone.docs&&zone.docs.length>0?"Referenced documents: "+zone.docs.map(d=>d.name).join(", "):""}
@@ -380,7 +380,7 @@ async function expandSection(sectionIdx){
   btn.disabled = true; btn.textContent = "⏳ Loading…";
 
   const section = appData.estimate.sections[sectionIdx];
-  const zone = appData.zones.map(z => `${z.type} ${z.sqft||""}SF ${z.finish} finish`).join(", ");
+  const zone = appData.zones.map(z => `${z.type} ${z.sqft||""}SF Designer finish`).join(", ");
 
   const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
 Project zones: ${zone}
@@ -432,7 +432,7 @@ function buildImagePrompt(zone){
     "Designer": "high-end finishes, custom details, elevated design, designer fixtures",
     "Luxury": "luxury finishes, bespoke custom millwork, top-of-market materials, premium everything"
   };
-  const finish = finishMap[zone.finish] || finishMap["Designer"];
+  const finish = finishMap["Designer"];
   const notes = zone.notes ? `, ${zone.notes}` : "";
   return `photorealistic interior rendering of a beautifully renovated ${zone.type} in a Montana home, ${finish}${notes}, professional architectural photography, bright natural light, warm inviting atmosphere, high resolution`;
 }
@@ -945,14 +945,14 @@ function renderScope(){
           <select onchange="appData.zones.find(x=>x.id==='${z.id}').type=this.value">
             <option value="">Select zone type…</option>
             ${ZONE_TYPES.map(t=>`<option ${z.type===t?"selected":""}>${esc(t)}</option>`).join("")}
-          </select>
+          
         </div>
         <div class="row2">
           <div class="field"><label class="field-label">Sq Footage</label><input type="number" value="${esc(z.sqft)}" placeholder="e.g. 120" oninput="appData.zones.find(x=>x.id==='${z.id}').sqft=this.value"/></div>
           <div class="field"><label class="field-label">Finish Level</label>
-            <select onchange="appData.zones.find(x=>x.id==='${z.id}').finish=this.value">
-              ${FINISH_LEVELS.map(f=>`<option value="${f.value}" ${z.finish===f.value?"selected":""}>${f.label} — ${f.desc}</option>`).join("")}
-            </select>
+            
+
+            
           </div>
         </div>
         <div class="field">
@@ -1091,7 +1091,7 @@ function renderConcepts(){
     </div>
     ${appData.zones.map(z=>`
       <div class="card">
-        <div style="color:var(--copper);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${esc(z.type)} — ${esc(z.finish)}</div>
+        <div style="color:var(--copper);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${esc(z.type)}</div>
         ${concepts[z.id]?`
           <textarea style="min-height:90px;" oninput="appData.concepts['${z.id}']=this.value">${esc(concepts[z.id])}</textarea>
           <div id="concept-img-${z.id}" style="margin-top:8px;">
@@ -1148,7 +1148,7 @@ function renderReview(){
       <div class="section-title">Zone Concepts</div>
       ${(d.zones||[]).map(z=>`
         <div style="margin-bottom:20px;">
-          <div style="color:var(--copper);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${esc(z.type)} — ${esc(z.finish)}</div>
+          <div style="color:var(--copper);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${esc(z.type)}</div>
           ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:var(--cream-dk);line-height:1.8;margin-bottom:8px;">${esc(d.concepts[z.id])}</p>`:""}
           ${d.conceptImages&&d.conceptImages[z.id]?`<img src="${d.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);margin-bottom:6px;" alt="Concept"/>`:""}
           ${z.photosInspo&&z.photosInspo.length?`<div class="img-row">${z.photosInspo.slice(0,2).map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
@@ -1293,7 +1293,7 @@ function renderPrintDoc(){
       <p style="font-size:11px;color:#888;font-style:italic;margin-top:10px;">*Conceptual estimate only. Final pricing determined after full design development (Steps 1–4).</p>
     </div>`:""}
     ${(d.zones||[]).map(z=>`<div style="margin-bottom:24px;page-break-inside:avoid;">
-      <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">${esc(z.type)} — ${esc(z.finish)} Finish</div>
+      <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">${esc(z.type)}</div>
       ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:#444;line-height:1.8;margin-bottom:12px;">${esc(d.concepts[z.id])}</p>`:""}
       ${d.conceptImages&&d.conceptImages[z.id]?`
         <div style="margin-bottom:12px;">
