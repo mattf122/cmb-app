@@ -113,9 +113,9 @@ async function runGenerateEstimate(){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-5-20250514",
+        model:"claude-sonnet-4-6",
         max_tokens: maxTokens,
-        stream: true,
+        stream: false,
         system,
         messages
       })
@@ -123,6 +123,7 @@ async function runGenerateEstimate(){
     if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||"Server error "+res.status); }
     const data = await res.json();
     if(data.error) throw new Error(data.error.message);
+    if(!data.content?.[0]?.text) throw new Error("Empty response — model: " + (data.model||"unknown") + " stop: " + (data.stop_reason||"unknown"));
     let text = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
     return text;
   }
