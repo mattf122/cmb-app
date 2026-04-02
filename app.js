@@ -113,7 +113,7 @@ async function runGenerateEstimate(){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6",
+        model:"claude-sonnet-4-5-20250514",
         max_tokens: maxTokens,
         stream: true,
         system,
