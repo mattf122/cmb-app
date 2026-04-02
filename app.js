@@ -111,21 +111,20 @@ async function runGenerateEstimate(){
   // Helper: call Claude via Cloudflare Worker
   async function workerCall(messages, system, maxTokens=1000){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: maxTokens,
-        stream: false,
-        system,
-        messages
+        system: system,
+        messages: messages
       })
     });
-    if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||"Server error "+res.status); }
     const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
-    if(!data.content?.[0]?.text) throw new Error("Empty response — model: " + (data.model||"unknown") + " stop: " + (data.stop_reason||"unknown"));
-    let text = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
-    return text;
+    if(data.error) throw new Error("Claude error: " + JSON.stringify(data.error));
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    if(!data.content || !data.content[0] || !data.content[0].text) throw new Error("No content. Full response: " + JSON.stringify(data).slice(0,200));
+    return data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
   }
 
   // Helper: parse JSON safely
@@ -164,7 +163,7 @@ async function runGenerateEstimate(){
       }
       const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:400, stream:false, messages:[{role:"user",content:visionContent}]})
+        body: JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:400, messages:[{role:"user",content:visionContent}]})
       });
       if(visionRes.ok){
         const vd = await visionRes.json();
@@ -371,7 +370,6 @@ Return ONLY this JSON array (4-6 items, real 2026 Flathead Valley CMB pricing, h
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        stream:true,
         model:"claude-haiku-4-5-20251001", max_tokens:1500,
         system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown.",
         messages:[{role:"user", content:prompt}]
