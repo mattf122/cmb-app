@@ -325,12 +325,11 @@ ${zoneList}
 OVERALL NOTES: ${appData.projectNotes||"none"}
 REFERENCED DOCUMENTS: ${docNames}
 
-${siteAnalysis ? `SITE ANALYSIS FROM PHOTOS:\n${siteAnalysis}` : "No photos provided — estimate from scope notes only."}
+${siteAnalysis ? "SITE ANALYSIS FROM PHOTOS:\n"+siteAnalysis : "No photos — estimate from scope notes only."}
 
-CRITICAL: Start response with { end with }. No markdown fences, no explanation. Raw JSON only.
+IMPORTANT: Keep lineItems to MAX 3 per section. Combine minor items into lump sums. Response MUST be complete valid JSON starting with { and ending with }.
 
-Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section:
-{"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"string","low":0,"high":0,"lineItems":[{"description":"string","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"string","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
+{"zones":[{"name":"z","low":0,"high":0,"notes":"n"}],"sections":[{"name":"s","csiCode":"00 00 00","btCostCode":"b","low":0,"high":0,"lineItems":[{"description":"d","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"Building Permit","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Engineering","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Superintendent","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Temp Facilities","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Dumpsters","low":0,"high":0,"qty":6,"unit":"EA"},{"name":"Builder Risk Insurance","low":0,"high":0,"qty":1,"unit":"LS"},{"name":"Contingency 5%","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"s","complianceNotes":["n"]}`;
 
     // Use streaming flag so function reads full Anthropic stream before returning
     btn.textContent = "⏳ Generating estimate (this may take 20-30 sec)…";
