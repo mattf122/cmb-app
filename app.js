@@ -128,14 +128,14 @@ async function runGenerateEstimate(){
   }
 
   // Helper: parse JSON safely
-  function safeJSON(text){
+  function safeJSON(text, label){
     const s = text.indexOf("{"); const e = text.lastIndexOf("}");
-    if(s===-1||e===-1) throw new Error("No JSON in response");
+    if(s===-1||e===-1) throw new Error("No JSON in " + label + ". Got: " + text.slice(0,120));
     try { return JSON.parse(text.slice(s,e+1)); }
     catch(err){
-      // Try to repair
       let t = text.slice(s,e+1).replace(/,\s*([}\]])/g,"$1");
-      return JSON.parse(t);
+      try { return JSON.parse(t); }
+      catch(e2){ throw new Error(label + " parse fail: " + text.slice(0,120)); }
     }
   }
 
@@ -182,7 +182,7 @@ Notes: ${appData.projectNotes||"none"}
 
 Return ONLY: {"zones":[{"name":"zone name","low":0,"high":0,"notes":"brief scope note"}]}`
     }], SYSTEM, 800);
-    const zoneResult = safeJSON(zoneRaw);
+    const zoneResult = safeJSON(zoneRaw, "zones");
 
     // ── CALL 3: Trade sections ────────────────────────────────────────
     btn.textContent = "⏳ Step 3 of 4 — Breaking out trades…";
@@ -194,7 +194,7 @@ ${siteNotes?"Site observations: "+siteNotes:""}
 
 Return ONLY: {"sections":[{"name":"trade name","low":0,"high":0}]}`
     }], SYSTEM, 600);
-    const sectionResult = safeJSON(sectionRaw);
+    const sectionResult = safeJSON(sectionRaw, "sections");
 
     // ── CALL 4: GC + totals ───────────────────────────────────────────
     btn.textContent = "⏳ Step 4 of 4 — Calculating totals…";
@@ -209,7 +209,7 @@ Duration: 1 month per $50k of cost (minimum 3 months)
 Return ONLY:
 {"gcLow":0,"gcHigh":0,"gcMonths":1,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"2 sentence project summary","complianceNotes":["key code or contractor item to flag"]}`
     }], SYSTEM, 600);
-    const gcResult = safeJSON(gcRaw);
+    const gcResult = safeJSON(gcRaw, "gc-totals");
 
     // ── Combine results ───────────────────────────────────────────────
     const estimate = {
