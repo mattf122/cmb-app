@@ -336,9 +336,9 @@ REFERENCED DOCUMENTS: ${docNames}
 
 ${siteAnalysis ? `SITE ANALYSIS FROM PHOTOS:\n${siteAnalysis}` : "No photos provided — estimate from scope notes only."}
 
-CRITICAL: Your response must start with { and end with }. No ```json, no markdown, no explanation — ONLY the raw JSON object.
+CRITICAL: Start response with { end with }. No markdown fences, no explanation. Raw JSON only.
 
-Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section. Use qty/unit/unitCost where known, otherwise 1/LS/total:
+Return this JSON with real 2026 CMB Montana dollar amounts. Max 5 line items per section:
 {"zones":[{"name":"string","low":0,"high":0,"notes":"string"}],"sections":[{"name":"section name","csiCode":"00 00 00","btCostCode":"string","low":0,"high":0,"lineItems":[{"description":"string","unit":"LS","qty":1,"unitCost":0,"total":0}]}],"generalConditions":{"low":0,"high":0,"months":1,"items":[{"name":"string","low":0,"high":0,"qty":1,"unit":"LS"}]},"subtotalLow":0,"subtotalHigh":0,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"string","complianceNotes":["string"]}`;
 
     let raw;
