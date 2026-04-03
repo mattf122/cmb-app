@@ -974,75 +974,203 @@ function getCsiInfo(name){
   return key ? CSI_MAP[key] : { csi: "01 00 00", bt: "General Conditions" };
 }
 
-function exportExcel(){
+async function exportExcel(){
   const d = appData;
   const est = d.estimate;
-  const dt = new Date().toLocaleDateString().replace(/\//g,"-");
+  if(!est){ alert("Generate estimate first"); return; }
+  
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "⏳ Generating Excel...";
+  
+  try {
+    // ── STEP 1: Auto-generate ALL line items for sections that don't have them ──
+    for(let i=0; i<(est.sections||[]).length; i++){
+      const section = est.sections[i];
+      if(!section.lineItems || section.lineItems.length === 0){
+        btn.textContent = `⏳ Generating line items for ${section.name}...`;
+        
+        const zone = appData.zones.map(z => `${z.type} ${z.sqft||""}SF Designer finish`).join(", ");
+        const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
+Project zones: ${zone}
+Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
+CSI: ${section.csiCode || getCsiInfo(section.name).csi}
 
-  // Buildertrend expects a FLAT table with a single header row
-  // Required columns: Title, Cost Code, Cost Type, Description, Quantity, Unit, Unit Cost, Total
-  // We output: Title, Cost Code (BT name), CSI Code, Cost Type, Description, Quantity, Unit, Unit Cost (Low), Total (Low), Total (High), Notes
+Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
+[{"description":"item name","unit":"SF","qty":1,"unitCostLow":0,"unitCostHigh":0,"totalLow":0,"totalHigh":0}]`;
 
-  const rows = [];
-
-  // Buildertrend Cost Group format:
-  // Group row: Title only (no cost) — BT treats this as a Cost Group header
-  // Line item rows: Title, Cost Code, Cost Type, Qty, Unit, Unit Cost
-  // Using HIGH estimate values per user preference
-  rows.push(["Title", "Cost Code", "CSI Code", "Cost Type", "Quantity", "Unit", "Unit Cost"]);
-
-  if(est){
-    // Trade sections — look up CSI/BT codes from our map
-    (est.sections||[]).forEach(s => {
-      const csi = getCsiInfo(s.name);
-      rows.push([s.name, "", "", "", "", "", ""]);
-      if(s.lineItems && s.lineItems.length){
-        s.lineItems.forEach(item => {
-          const qty = item.qty||1;
-          const unit = item.unit||"LS";
-          const unitCost = item.unitCost||(qty>0?Math.round(item.total/qty):item.total);
-          rows.push(["  "+item.description, csi.bt, csi.csi, "Subcontractor", qty, unit, unitCost]);
+        try {
+          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              model:"claude-haiku-4-5-20251001", max_tokens:1500,
+              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include both unitCostLow/unitCostHigh and totalLow/totalHigh for each item.",
+              messages:[{role:"user", content:prompt}]
+            })
+          });
+          if(res.ok){
+            const data = await res.json();
+            let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+            const start = raw.indexOf("[");
+            const end = raw.lastIndexOf("]");
+            if(start!==-1 && end!==-1){
+              const items = JSON.parse(raw.slice(start, end+1));
+              est.sections[i].lineItems = items;
+            }
+          }
+        } catch(e){
+          console.warn(`Failed to generate line items for ${section.name}:`, e);
+        }
+      }
+    }
+    
+    // ── STEP 2: Build Excel workbook with SheetJS ──
+    btn.textContent = "⏳ Building Excel file...";
+    
+    // We'll use a simple approach: build data arrays and let SheetJS handle formatting
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    
+    // ── PROJECT INFORMATION HEADER ──
+    wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
+    wsData.push([]);
+    wsData.push(["Client:", d.clientName||""]);
+    wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT ${d.clientZip||""}`]);
+    wsData.push(["Date:", new Date().toLocaleDateString()]);
+    wsData.push(["Rep:", d.repName||""]);
+    wsData.push(["Total Budget Range:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
+    wsData.push([]);
+    
+    // ── ZONE SUMMARY ──
+    wsData.push(["ZONE SUMMARY"]);
+    wsData.push(["Zone", "Type", "Sq Ft", "Budget Low", "Budget High", "Notes"]);
+    (est.zones||[]).forEach((z,i) => {
+      wsData.push([
+        `Zone ${i+1}`,
+        z.name||"",
+        appData.zones[i]?.sqft||"",
+        z.low||0,
+        z.high||0,
+        z.notes||""
+      ]);
+    });
+    wsData.push([]);
+    wsData.push([]);
+    
+    // ── DETAILED COST BREAKDOWN ──
+    wsData.push(["DETAILED COST BREAKDOWN"]);
+    wsData.push([]);
+    wsData.push(["Item Description", "CSI Code", "Cost Code", "Type", "Qty", "Unit", "Unit Low", "Unit High", "Total Low", "Total High"]);
+    
+    // Trade sections
+    (est.sections||[]).forEach(section => {
+      const csi = getCsiInfo(section.name);
+      
+      // Section header row
+      wsData.push([section.name.toUpperCase(), "", "", "", "", "", "", "", "", ""]);
+      
+      // Line items
+      if(section.lineItems && section.lineItems.length){
+        section.lineItems.forEach(item => {
+          wsData.push([
+            "  " + (item.description||""),
+            csi.csi,
+            csi.bt,
+            "Subcontractor",
+            item.qty||1,
+            item.unit||"LS",
+            item.unitCostLow || item.unitCost || 0,
+            item.unitCostHigh || item.unitCost || 0,
+            item.totalLow || item.total || 0,
+            item.totalHigh || item.total || 0
+          ]);
         });
       } else {
-        rows.push(["  "+s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
+        // Fallback if line items failed to generate
+        wsData.push([
+          "  " + section.name,
+          csi.csi,
+          csi.bt,
+          "Subcontractor",
+          1,
+          "LS",
+          section.low||0,
+          section.high||0,
+          section.low||0,
+          section.high||0
+        ]);
       }
-      rows.push(["  SUBTOTAL — "+s.name, csi.bt, csi.csi, "Subcontractor", 1, "LS", s.high]);
-      rows.push(["", "", "", "", "", "", ""]);
+      
+      // Section total row (right-aligned in column I-J)
+      wsData.push(["", "", "", "", "", "", "", "Section Total:", section.low||0, section.high||0]);
+      wsData.push([]); // Blank row
     });
-
-    // General conditions section
-    const gcHigh = est.gcHigh || est.generalConditions?.high || 0;
+    
+    // ── GENERAL CONDITIONS ──
+    wsData.push(["GENERAL CONDITIONS (" + (est.gcMonths||3) + " months)"]);
     const gcItems = est.generalConditions?.items || [];
-    rows.push(["General Conditions", "", "", "", "", "", ""]);
     if(gcItems.length){
       gcItems.forEach(item => {
-        const csi = getCsiInfo(item.name);
-        rows.push(["  "+item.name, csi.bt, csi.csi, "Other", item.qty||1, item.unit||"LS", item.high||0]);
+        wsData.push([
+          "  " + (item.name||""),
+          "01 00 00",
+          "General Conditions",
+          "Other",
+          item.qty||1,
+          item.unit||"LS",
+          item.low||0,
+          item.high||0,
+          item.low||0,
+          item.high||0
+        ]);
       });
     }
-    rows.push(["  General Conditions Total", "General Conditions", "01 00 00", "Other", 1, "LS", gcHigh]);
-    rows.push(["", "", "", "", "", "", ""]);
-
-    // Overhead & Profit — internal line
-    rows.push(["Overhead & Profit (20%) — INTERNAL", "General Conditions", "01 00 00", "Other", 1, "LS", est.overheadProfitHigh||0]);
-    rows.push(["", "", "", "", "", "", ""]);
-    rows.push(["TOTAL CONCEPTUAL BUDGET (HIGH)", "General Conditions", "01 00 00", "Other", 1, "LS", est.totalHigh]);
+    wsData.push(["", "", "", "", "", "", "", "GC Total:", est.gcLow||0, est.gcHigh||0]);
+    wsData.push([]);
+    wsData.push([]);
+    
+    // ── PROJECT TOTALS ──
+    wsData.push(["PROJECT TOTALS"]);
+    wsData.push(["Construction Subtotal", "", "", "", "", "", "", "", est.subtotalLow||0, est.subtotalHigh||0]);
+    wsData.push(["General Conditions", "", "", "", "", "", "", "", est.gcLow||0, est.gcHigh||0]);
+    wsData.push(["", "", "", "", "", "", "", "", "", ""]);
+    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", est.totalLow||0, est.totalHigh||0]);
+    
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    
+    // Set column widths
+    ws['!cols'] = [
+      {wch: 40}, // Item Description
+      {wch: 10}, // CSI Code
+      {wch: 25}, // Cost Code
+      {wch: 15}, // Type
+      {wch: 6},  // Qty
+      {wch: 6},  // Unit
+      {wch: 12}, // Unit Low
+      {wch: 12}, // Unit High
+      {wch: 12}, // Total Low
+      {wch: 12}  // Total High
+    ];
+    
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Estimate");
+    
+    // Generate Excel file and download
+    const dt = new Date().toLocaleDateString().replace(/\//g,"-");
+    const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + "_Estimate.xlsx";
+    XLSX.writeFile(wb, filename);
+    
+    btn.textContent = originalText;
+    btn.disabled = false;
+    
+  } catch(e){
+    alert("Export failed: " + e.message);
+    console.error(e);
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
-
-  const csv = "\uFEFF" + rows.map(r =>
-    r.map(cell => {
-      const s = String(cell === null || cell === undefined ? "" : cell);
-      return s.includes(",") || s.includes('"') ? '"' + s.replace(/"/g,'""') + '"' : s;
-    }).join(",")
-  ).join("\n");
-
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + ".csv";
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function emailProposal(){
