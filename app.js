@@ -137,27 +137,63 @@ async function runAnalyzeScope(){
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
 
-    const analysisPrompt = `You are an experienced construction manager with 30 years building residential and commercial projects in Northwest Montana. You are reviewing a site visit for a potential project.
+    const analysisPrompt = `You're the Chief Estimator at Copper Mountain Builders with 45 years building residential and commercial projects in Northwest Montana. You're reviewing a site visit to identify what information you need for an accurate estimate and construction schedule.
 
 PROJECT ZONES:
 ${zoneList}
 
-OVERALL NOTES: ${appData.projectNotes||"none"}
+OVERALL NOTES: ${appData.projectNotes||"none provided"}
 SITE ADDRESS: ${appData.projectAddress||"unknown"}, ${appData.projectCity||"Montana"}
-${visionContent.length > 0 ? "Photos are attached above — analyze them carefully." : "No photos provided."}
+${visionContent.length > 0 ? "PHOTOS: Attached above — analyze them carefully with your experienced eye." : "No photos provided."}
 
-Based on everything you can see and read, identify what information you already know and what critical information is MISSING that you need to build an accurate estimate and construction schedule.
+Based on everything you can see and read, identify what critical information is MISSING that you need to build an accurate estimate and schedule.
 
-Think like a CM preparing to build this project — what do you need to know about:
-- Site conditions (slope, soil, access, utilities at road)
-- Foundation type (slab/crawl/basement)
-- Structure specifics (roof pitch, ceiling heights, load-bearing walls)
-- Mechanical systems (well/city water, septic/sewer, propane/electric/gas, heating system type)
-- Site work (driveway, landscaping, retaining walls)
-- Timeline constraints (start date, occupancy deadline, winter work)
-- Any special conditions visible in photos
+Think like a CM with 45 years in Montana preparing to build this project. What do you need to know about:
 
-Generate up to 10 focused questions — only ask what you genuinely cannot determine from the photos and notes. Ask the most critical questions first. Make each question specific and answerable on-site in 30 seconds.
+SITE CONDITIONS:
+- Slope/topography (affects foundation type, access, excavation cost)
+- Soil type (clay vs sand vs rock = huge cost difference)
+- Site access (can excavator/concrete truck reach? narrow driveway = hand-carry = $$)
+- Utilities at road (water, sewer, power, gas - or well/septic/propane?)
+- Existing site work (driveway condition, landscaping to protect, trees to remove)
+
+FOUNDATION & STRUCTURE:
+- Foundation type (slab/crawl/basement - critical cost driver)
+- Existing foundation condition (cracks, settling, moisture issues)
+- Structural observations (load-bearing walls, roof framing visible, floor system)
+- Roof pitch (affects material cost, labor, snow load engineering)
+- Ceiling heights (standard 8' vs vaulted vs?)
+
+MECHANICAL SYSTEMS (code triggers):
+- Water source: City water or well? (if well: depth, flow rate, condition)
+- Waste: City sewer or septic? (if septic: size, condition, last pumped)
+- Heating: Forced air, radiant, baseboard, wood? Fuel type?
+- Electrical service: 100A, 200A? Panel type (breaker/fuse)? Condition?
+- Any knob-and-tube wiring visible? Aluminum wiring? (code upgrade triggers)
+
+TIMELINE & CONSTRAINTS:
+- Desired start date (affects weather planning)
+- Occupancy deadline (hard deadline = cost)
+- Work-around-occupancy? (living in house during reno = complexity)
+- Winter work acceptable? (Nov-Apr = heated enclosure costs)
+
+SCOPE CLARIFICATIONS:
+- What's salvageable vs must-replace?
+- Any special features or custom work?
+- Quality level expectations beyond "Designer" (imported tile? custom millwork?)
+
+MONTANA-SPECIFIC:
+- Wildfire interface zone? (WUI requirements add 10-15%)
+- Floodplain or shoreline? (special permits, restrictions)
+- Historic district? (restrictions, longer permitting)
+- HOA or covenants? (approval process, restrictions)
+
+Generate up to 10 focused questions — only ask what you genuinely CANNOT determine from the photos and notes. Ask the most CRITICAL questions first (the ones that change the estimate by $20k+).
+
+Make each question:
+- Specific and answerable on-site in 30 seconds
+- Multiple choice or yes/no when possible (easier for field use)
+- Targeted at high-impact cost drivers
 
 Return ONLY this JSON:
 {"questions":[{"id":"q1","question":"Your question here?","type":"text","options":[]},{"id":"q2","question":"Yes/no question?","type":"yesno","options":[]},{"id":"q3","question":"Multiple choice?","type":"choice","options":["Option A","Option B","Option C"]}]}
@@ -171,8 +207,8 @@ Use type "text" for open answers, "yesno" for yes/no, "choice" for multiple choi
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-haiku-4-5-20251001",
-        max_tokens:1200,
+        model:"claude-sonnet-4-20250514",
+        max_tokens:1500,
         messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}]
       })
     });
@@ -215,12 +251,12 @@ async function runGenerateEstimate(){
   ).join("\n");
 
   // Helper: call Claude via Cloudflare Worker
-  async function workerCall(messages, system, maxTokens=1000){
+  async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: model,
         max_tokens: maxTokens,
         system: system,
         messages: messages
@@ -245,36 +281,77 @@ async function runGenerateEstimate(){
     }
   }
 
-  const SYSTEM = `You are a construction estimator for Copper Mountain Builders in Flathead Valley Montana. 2026 pricing. Always include GC costs and 20% overhead and profit in all totals.
+  const SYSTEM = `You are the Chief Estimator at Copper Mountain Builders with 45 years of experience building residential and commercial projects in Northwest Montana. You've personally built over 400 homes in Flathead Valley and know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction here.
 
-HARD PER-SF LIMITS — your final totals MUST fall within these ranges (all-in):
+CORE EXPERTISE:
+- Montana Building Code (IRC 2021, IBC 2021) + Flathead County amendments
+- Design-Build methodology (you live and breathe the 5-Step process)
+- Construction sequencing and critical path scheduling
+- Material procurement and lead time management (you know what takes 12 weeks vs 2 weeks)
+- Trade coordination (you know plumber goes before drywaller, not after)
+- Weather window planning (Montana has a 180-day construction season, and you plan around it)
+- Risk identification (you spot problems in photos that clients don't see)
+- Value engineering (you know where to save money and where NOT to)
+
+MONTANA CONSTRUCTION REALITIES YOU KNOW BY HEART:
+- 48-inch frost depth (footings go DEEP, excavation costs real money)
+- 70 psf ground snow load (roof framing is engineered, not stick-built guesswork)
+- Construction season: Mid-May to mid-October (foundation work), year-round for interiors once dried-in
+- Concrete restrictions: No pours below 50°F without heated enclosures ($$$)
+- Standing seam metal is standard (shingles ice dam in our snow = callback nightmares)
+- Window lead times: 8-12 weeks (order during design or wait till next year)
+- Standing seam lead time: 10-14 weeks (same deal)
+- Subcontractor reality: Good framers book 8-12 weeks out, good finish carpenters 6+ weeks
+- Permit timeline: Flathead County = 4-6 weeks plan review (not 2 weeks)
+- Wildfire interface zones: WUI requirements add 10-15% to exterior costs
+- Material costs: We're 15-25% higher than Boise/Missoula (remote location, tough winters)
+
+HARD PER-SF LIMITS — your final totals MUST fall within these ranges (all-in, including GC + 20% O&P):
 New construction heated living space: $200-320/SF
-New construction attached garage: $65-110/SF
+New construction attached garage: $65-110/SF  
 New construction ADU: $220-360/SF
-Remodel: $120-280/SF
+Remodel: $120-280/SF (add 15% if pre-1980 for hidden issues)
 Deck: $80-180/SF
 
-EXAMPLE: 1,200 SF living + 600 SF garage Designer new construction = $450,000-$750,000 total all-in. If your numbers exceed this, scale them back proportionally before returning.
+EXAMPLE SANITY CHECK: 1,200 SF living + 600 SF garage Designer new construction = $450,000-$750,000 total all-in.
+If your numbers exceed these ranges, you've made an error. Scale back proportionally.
 
-UNIT COSTS (2026 Flathead Valley):
-Foundation: slab $9-12/SF, wall $38-48/SF, excavation $8-11/SF
-Framing: 2x6 walls $5.50-7.50/SF, TJI floor $20-26/SF, rafters $18-23/SF
-Roofing: standing seam $24-30/SF, shingle $8-11/SF
-Exterior: LP siding $12-16/SF, windows $900-1,800 EA, ext doors $1,400-2,600 EA
-Insulation: spray foam $3-4/SF, blown $1.80-2.80/SF
+2026 FLATHEAD VALLEY UNIT COSTS (what things ACTUALLY cost here):
+Foundation: slab $9-12/SF, stem wall $38-48/SF, excavation $8-11/SF (rocky soil = higher end)
+Framing: 2x6 walls $5.50-7.50/SF, TJI floor $20-26/SF, roof rafters $18-23/SF (snow load = serious engineering)
+Roofing: standing seam $24-30/SF (standard), architectural shingle $8-11/SF (only for low-pitch)
+Exterior: LP SmartSide $12-16/SF, windows $900-1,800 EA, exterior doors $1,400-2,600 EA
+Insulation: spray foam $3-4/SF (open cell R-21 walls, R-49 ceiling), blown cellulose $1.80-2.80/SF
 Plumbing: full bath new $14,000-26,000, master bath remodel $16,000-34,000, standard bath $9,000-18,000
-Electrical: new construction $14,000-28,000, panel $3,500-6,500
-HVAC: forced air $11,000-21,000, mini-split $3,500-6,500/zone
-Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF
-Cabinetry: kitchen Designer $24-46k; bath vanity $2,500-8,500
-Deck: Trex $16-22/SF, rail $70-100/LF
-GC (1 month per $50k, min 3 months): permit $5,500-10,000, super $8,000-12,000/6mo, facilities $2,200-3,800, dumpsters $500-650/pull x5-8, insurance $3,500-6,500, contingency 5%
+Electrical: new construction $14,000-28,000 (depends on SF), service upgrade 100A→200A $3,500-6,500
+HVAC: forced air $11,000-21,000 (depends on SF + zones), mini-split $3,500-6,500/head
+Flooring: tile $12-22/SF installed, hardwood $9-18/SF, LVP $6-11/SF
+Cabinetry: kitchen Designer $24,000-46,000 (12-16 LF), bath vanity $2,500-8,500
+Countertops: quartz $65-95/SF, granite $55-85/SF, laminate $35-55/SF
+Deck: Trex composite $16-22/SF, aluminum rail $70-100/LF
+Drywall: $2.80-3.60/SF hung/taped/textured
 
-Respond ONLY with the exact JSON format requested. No markdown. No explanation.`;
+GENERAL CONDITIONS (1 month per $50k project cost, minimum 3 months):
+- Permits: Building $5,500-10,000 (depends on valuation), Mechanical $450-750, Plumbing $450-750, Electrical $450-750
+- Engineering: Structural $2,500-4,500, Septic design $1,800-3,200 (if needed)
+- Superintendent: $8,000-12,000 per 6 months
+- Temp facilities: $2,200-3,800 (toilet, power, dumpster access)
+- Dumpsters: $500-650/pull × 5-8 pulls typical
+- Builder's risk insurance: $3,500-6,500
+- Contingency: 5% minimum (10% for remodels where we open walls)
+
+PRICING PHILOSOPHY:
+- LOW range = everything goes perfectly (it never does, but this is the "best case")
+- HIGH range = reality (sub delays, material escalation, weather delays, hidden conditions)
+- Always include contingency (it will get used)
+- Always include winter protection if timeline crosses Nov-Apr ($8k-15k for heated enclosure)
+- Always pad sub schedules (they say "3 weeks" = plan for 4-5 weeks in reality)
+
+RESPOND ONLY WITH VALID JSON. No markdown. No explanation. Just the exact JSON structure requested.`;
 
   try {
     // ── CALL 1: Photo analysis ────────────────────────────────────────
-    btn.textContent = "⏳ Step 1 of 4 — Analyzing photos…";
+    btn.textContent = "⏳ Step 1 of 6 — Analyzing photos…";
     let siteNotes = "";
 
     const allDocs = getAllDocs();
@@ -286,19 +363,62 @@ Respond ONLY with the exact JSON format requested. No markdown. No explanation.`
     for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name});
 
     if(photosToAnalyze.length > 0){
-      const visionContent = [{type:"text", text:`Analyze these site photos for a Montana construction project. Describe existing conditions, materials, complexity, and scope items visible. Be brief — 3-4 sentences max. Zones: ${zoneList}`}];
+      const visionContent = [{type:"text", text:`You're the Chief Estimator at Copper Mountain Builders with 45 years of Montana construction experience. You're on-site in Flathead Valley doing a walkthrough. Analyze these photos with the eye of a seasoned builder who's seen everything.
+
+PROJECT ZONES: ${zoneList}
+LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
+OVERALL NOTES: ${appData.projectNotes||"none provided"}
+
+FOR EACH PHOTO, identify as a Montana construction expert:
+
+1. EXISTING CONDITIONS
+   - Structure type, age (look for clues), materials visible
+   - Systems visible (electrical panels, plumbing, HVAC)
+   - Foundation type, framing visible, roof structure
+   - Current condition (good/fair/poor for each major component)
+
+2. CODE COMPLIANCE RED FLAGS
+   - What will Flathead County inspector immediately flag?
+   - Existing code violations that must be brought to compliance when permit is pulled
+   - Systems that trigger full upgrade requirements (e.g., knob-and-tube = rewire)
+
+3. HIDDEN COSTS YOU SEE COMING
+   - Foundation issues (cracks, settling, moisture = $$$)
+   - Structural issues (sagging, rot, undersized members)
+   - Systems that look "functional" now but won't pass inspection
+   - Access problems (narrow driveway = crane can't reach = hand-carry everything)
+
+4. SCOPE IMPLICATIONS
+   - What MUST be included that client probably doesn't expect?
+   - Collateral damage areas (demo this = affects that)
+   - Sequence issues (can't do X without first doing Y)
+
+5. MONTANA-SPECIFIC OBSERVATIONS
+   - Snow load issues (sagging roof = undersized, needs engineering)
+   - Frost heave evidence (doors don't close, cracks = foundation movement)
+   - Ice dam evidence (icicles, staining = ventilation problems)
+   - Winter access (mud season = can't get equipment in Apr-May)
+
+6. MATERIAL OBSERVATIONS
+   - Age of major components (roof, siding, windows)
+   - Quality level (builder-grade vs custom)
+   - What's salvageable vs must-replace
+
+Be specific. Use measurements when visible. Reference code sections if applicable. Think like you're walking the site with the owner explaining "here's what I see that you might not."
+
+Provide a comprehensive analysis (600-1000 words). This drives the estimate quality.`}];
       for(const {photo, label} of photosToAnalyze.slice(0,8)){
-        const compressed = await compressImage(photo, 600, 0.6);
+        const compressed = await compressImage(photo, 800, 0.7);
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
       const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:400, messages:[{role:"user",content:visionContent}]})
+        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:2000, messages:[{role:"user",content:visionContent}]})
       });
       if(visionRes.ok){
         const vd = await visionRes.json();
-        if(vd.content?.[0]?.text) siteNotes = vd.content[0].text.replace(/[$"]/g,"").slice(0,400);
+        if(vd.content?.[0]?.text) siteNotes = vd.content[0].text;
       }
     }
 
@@ -308,66 +428,273 @@ Respond ONLY with the exact JSON format requested. No markdown. No explanation.`
       return ans ? `Q: ${q.question}\nA: ${ans}` : null;
     }).filter(Boolean).join("\n");
 
-    // ── CALL 2: Zone totals ───────────────────────────────────────────
-    btn.textContent = "⏳ Step 2 of 4 — Pricing zones…";
-    const zoneRaw = await workerCall([{role:"user", content:
-      `Price each zone for this Montana project. Include 20% O&P in totals.
-Zones:
-${zoneList}
-${siteNotes?"Site observations: "+siteNotes:""}
-Notes: ${appData.projectNotes||"none"}
-${qaContext?"Pre-construction Q&A:\n"+qaContext:""}
+    // ── CALL 2: Code Compliance Review (NEW) ──────────────────────────
+    btn.textContent = "⏳ Step 2 of 6 — Reviewing code compliance…";
+    let complianceResult = null;
+    try {
+      const complianceRaw = await workerCall([{role:"user", content:
+        `You're the Chief Estimator at CMB with 45 years of Montana building experience. Review this project for building code compliance and permitting requirements.
 
-Return ONLY: {"zones":[{"name":"zone name","low":0,"high":0,"notes":"brief scope note"}]}`
-    }], SYSTEM, 800);
+PROJECT: ${appData.projectAddress}, ${appData.projectCity||"Flathead County"}, Montana
+ZONES: ${zoneList}
+PROJECT NOTES: ${appData.projectNotes||"none"}
+${siteNotes?"SITE OBSERVATIONS FROM PHOTOS:\n"+siteNotes:"No photos analyzed"}
+${qaContext?"CLIENT Q&A:\n"+qaContext:""}
+
+As a Montana code expert who's navigated hundreds of Flathead County permits:
+
+1. PERMITS REQUIRED (be specific - which permits, which departments):
+   - Building permit type (residential/commercial, new/remodel/addition)
+   - Electrical permit (service upgrade, new circuits, etc.)
+   - Plumbing permit (new fixtures, water service, etc.)
+   - Mechanical permit (HVAC, bathroom exhaust, etc.)
+   - Special permits: septic (DNRC), well (DNRC), WUI compliance, etc.
+
+2. CODE COMPLIANCE ITEMS (IRC 2021 / IBC 2021 + Flathead County amendments):
+   - Structural requirements (snow load 70 psf, seismic Zone D2)
+   - Energy code (Montana 2021: R-21 walls, R-49 ceiling min)
+   - Fire/life safety (egress windows for bedrooms, smoke/CO detectors)
+   - Accessibility (if commercial or 3+ unit residential)
+   - Specific code sections triggered by this work
+
+3. FLATHEAD COUNTY SPECIFICS:
+   - Plan review timeline (typically 4-6 weeks first submittal)
+   - Required engineering (structural, energy, septic, etc.)
+   - Inspection sequence and hold points
+   - Special conditions: WUI zones, floodplain, shoreline, etc.
+
+4. SCOPE TRIGGERS (things that force code upgrades of EXISTING systems):
+   - Electrical: Adding load beyond 50% panel capacity = service upgrade
+   - Plumbing: New bathroom = potential whole-house water pressure upgrade
+   - HVAC: Adding square footage beyond 50% = full system resize
+   - Accessibility: Commercial remodel >$150k = ADA compliance required
+   - Energy: Addition >600 SF or >10% floor area = whole house energy compliance
+
+5. COST IMPACT ITEMS (dollar estimates):
+   - Permit fees (building, trade permits, engineering review)
+   - Required engineering costs
+   - Code-mandated upgrades (not in client's original scope)
+   - Inspection fees
+   - Plan revisions budget (always need revisions)
+
+6. TIMELINE RISKS:
+   - Permit approval delays
+   - Engineering turnaround
+   - Required testing (soil, radon, etc.)
+   - Seasonal restrictions (septic install, well drilling)
+
+Return detailed compliance analysis with specific code sections, permit names, cost estimates, and timeline impacts.
+Format as narrative analysis, 500-800 words.`
+      }], SYSTEM, 1500);
+      
+      complianceResult = complianceRaw;
+    } catch(e){ 
+      console.warn("Code compliance analysis failed:", e.message);
+      complianceResult = "Code compliance review unavailable. Recommend manual review before final estimate.";
+    }
+
+    // ── CALL 3: Zone totals ───────────────────────────────────────────
+    // ── CALL 3: Zone totals ───────────────────────────────────────────
+    btn.textContent = "⏳ Step 3 of 6 — Pricing zones…";
+    const zoneRaw = await workerCall([{role:"user", content:
+      `Price each zone for this Montana project with your 45 years of Flathead Valley building experience.
+
+ZONES:
+${zoneList}
+
+CONTEXT YOU HAVE:
+${siteNotes?"Site Analysis:\n"+siteNotes+"\n":""}
+${complianceResult?"Code Compliance Notes:\n"+complianceResult+"\n":""}
+${appData.projectNotes?"Project Notes: "+appData.projectNotes+"\n":""}
+${qaContext?"Pre-Construction Q&A:\n"+qaContext+"\n":""}
+
+For each zone, think through:
+- Scope of work (what's actually involved)
+- Existing conditions (demo, prep work needed based on photos)
+- Code compliance costs (permits, upgrades triggered)
+- Material costs (2026 Flathead Valley pricing)
+- Labor costs (Montana wages + sub availability premium)
+- Hidden costs you see coming (based on photos/notes)
+- Complexity factors (access, existing conditions, weather timing)
+
+LOW range = best case (everything goes perfectly)
+HIGH range = reality (sub delays, hidden conditions, material escalation)
+
+Include 20% O&P in all totals. Be realistic - Montana costs 15-25% more than Boise/Missoula.
+
+Return ONLY: {"zones":[{"name":"zone name matching input","low":0,"high":0,"notes":"2-3 sentence scope note explaining what drives the cost"}]}`
+    }], SYSTEM, 1200);
     const zoneResult = safeJSON(zoneRaw, "zones");
 
-    // ── CALL 3: Trade sections ────────────────────────────────────────
-    btn.textContent = "⏳ Step 3 of 4 — Breaking out trades…";
+    // ── CALL 4: Trade sections ────────────────────────────────────────
+    btn.textContent = "⏳ Step 4 of 6 — Breaking out trades…";
     const sectionRaw = await workerCall([{role:"user", content:
-      `Break this Montana construction project into trade sections. MAX 7 sections. Include 20% O&P in totals.
-Zones: ${zoneList}
-Total budget range: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))}
-${siteNotes?"Site observations: "+siteNotes:""}
+      `Break this Montana construction project into trade sections with your 45 years of experience coordinating subs in Flathead Valley.
+
+ZONES: ${zoneList}
+ZONE TOTALS: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} LOW to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))} HIGH
+${siteNotes?"Site observations: "+siteNotes.slice(0,400):""}
+
+Create MAX 7 trade sections (fewer is better - don't over-slice).
+Typical sections: Demolition, Sitework, Foundation, Framing, Exterior, Roofing, Plumbing, Electrical, HVAC, Insulation, Drywall, Flooring, Cabinetry, Finishes
+
+Match trade totals to zone totals (they must reconcile).
+Include 20% O&P in all section totals.
 
 Return ONLY: {"sections":[{"name":"trade name","low":0,"high":0}]}`
-    }], SYSTEM, 600);
+    }], SYSTEM, 800, "claude-haiku-4-5-20251001");
     const sectionResult = safeJSON(sectionRaw, "sections");
 
-    // ── CALL 4: GC + totals ───────────────────────────────────────────
-    btn.textContent = "⏳ Step 4 of 4 — Calculating totals…";
-    // Use zone totals from Call 2 as the authoritative base — don't let Call 4 recalculate
+    // ── CALL 5: GC + totals + sales summary ──────────────────────────
+    btn.textContent = "⏳ Step 5 of 6 — Calculating GC costs + summary…";
+    // Use zone totals from Call 3 as the authoritative base — don't let Call 5 recalculate
     const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+(z.low||0),  0);
     const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+(z.high||0), 0);
 
     const gcRaw = await workerCall([{role:"user", content:
-      `Calculate ONLY the general conditions costs for this Montana construction project.
-Base construction subtotal (already calculated): ${fmt$(subtotalLow)} low / ${fmt$(subtotalHigh)} high
-Duration: 1 month per $50k (minimum 3 months)
-GC items: permit, engineering, superintendent, temp facilities, dumpsters, builder risk insurance, 5% contingency
+      `Calculate general conditions costs AND write the client-facing summary for this Montana design-build proposal.
 
-Return ONLY this JSON — do NOT recalculate the subtotal:
-{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence summary","complianceNotes":["note"]}`
-    }], SYSTEM, 400);
+PROJECT CONTEXT:
+Base construction subtotal (already calculated): ${fmt$(subtotalLow)} LOW / ${fmt$(subtotalHigh)} HIGH
+Zones: ${zoneList}
+${siteNotes?"Site Analysis: "+siteNotes.slice(0,300):""}
+${complianceResult?"Code/Permit Notes: "+complianceResult.slice(0,300):""}
+${qaContext?"Project Q&A:\n"+qaContext:""}
+
+PART 1 - GENERAL CONDITIONS:
+Duration: 1 month per $50k of construction cost (minimum 3 months)
+Include: permits, engineering, superintendent, temp facilities, dumpsters, builder's risk insurance, 5% contingency
+
+Calculate realistic GC costs for Flathead Valley. Don't skimp - these are real costs.
+
+PART 2 - SALES-FOCUSED SUMMARY:
+Write a compelling 3-4 paragraph summary (400-600 words) for the proposal. You're the senior estimator with 45 years explaining this to the homeowner.
+
+GOALS:
+1. Build trust (demonstrate expertise)
+2. Educate (explain value and Montana realities)
+3. Position design-build (this process protects them)
+4. Create appropriate urgency (lead times, weather windows, sub availability)
+5. Make the retainer feel small (relative to total and to risk of not doing design first)
+
+STRUCTURE:
+Para 1: Project vision + impact (paint the picture of transformed space)
+Para 2: Why design-build + why CMB (expertise, risk mitigation, Flathead Valley knowledge)
+Para 3: Budget reality (explain the range, Montana-specific costs, what's included)
+Para 4: Next steps (retainer, timeline, urgency if applicable)
+
+TONE: Confident but consultative, educational not salesy, specific not generic, honest about costs and risks.
+
+AVOID: Generic language, jargon, overpromising, pressure tactics.
+
+PART 3 - COMPLIANCE NOTES (for internal/rep use only):
+Flag any code issues, permit gotchas, or risks from the analysis that the rep should know about but don't belong in client summary.
+
+Return ONLY this JSON:
+{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"client-facing 3-4 paragraph summary here","complianceNotes":["internal note 1","note 2"]}`
+    }], `${SYSTEM}
+
+When writing the summary, remember: You're a 45-year veteran having a conversation with a homeowner. Be warm, knowledgeable, and helpful. Explain WHY things cost what they cost. Build trust through specificity and honesty.`, 1500);
     const gcResult = safeJSON(gcRaw, "gc-totals");
 
-    // ── CALL 5: Construction Schedule ────────────────────────────────
-    btn.textContent = "⏳ Step 5 of 5 — Building schedule…";
+    // ── CALL 6: Construction Schedule ────────────────────────────────
+    btn.textContent = "⏳ Step 6 of 6 — Building schedule…";
     let scheduleResult = null;
     try {
       const schedRaw = await workerCall([{role:"user", content:
-        `Build a construction schedule for this Montana project.
+        `Build a detailed construction schedule for this Montana design-build project. You have 45 years sequencing jobs in Flathead Valley - show your expertise.
+
+PROJECT:
 Zones: ${zoneList}
 Total budget: ${fmt$(subtotalLow + (gcResult.gcLow||0))} – ${fmt$(subtotalHigh + (gcResult.gcHigh||0))}
-Duration: ${gcResult.gcMonths||3} months
+Construction duration: ${gcResult.gcMonths||3} months
 ${qaContext?"Project Q&A:\n"+qaContext:""}
+${siteNotes?"Site observations: "+siteNotes.slice(0,400):""}
 
-Montana factors: 48-inch frost line, no concrete below 20F, standing seam lead time 8-12 weeks, window lead time 6-10 weeks, subcontractor availability tight in Flathead Valley.
+Your schedule must account for:
 
-Return ONLY: {"startToFinish":"X-Y months","milestones":[{"phase":"name","duration":"X weeks","notes":"brief note"}]}`
-      }], SYSTEM, 500);
+DESIGN PHASE (Steps 1-4 of CMB 5-Step process):
+- Step 1: Initial Consultation + Vision Planning (2 weeks, 2 client meetings)
+- Step 2: Schematic Design (2 weeks, 2 client meetings)
+  → Client homework period: 1 week to select cabinets/fixtures/finishes
+- Step 3: Design Development (3 weeks)
+  → Drawings to structural engineer (week 1)
+  → Client final sign-off on plans (week 3)
+- Step 4: Project Development (4-5 weeks)
+  → Permit submittal to Flathead County (week 1)
+  → County plan review (4-6 weeks - runs parallel)
+  → Subcontractor bidding (weeks 1-3)
+  → Material quoting (weeks 2-4)
+  → Final construction contract (week 4-5)
+
+TOTAL DESIGN PHASE: 10-14 weeks before construction starts
+
+CONSTRUCTION PHASE - Critical Montana Realities:
+
+SEASONAL CONSTRAINTS:
+- Foundation work: Mid-May to October only (frost out + concrete temp >50°F)
+- Roofing deadline: Dried-in by Sept 15 (snow starts Sept 15-30)
+- Exterior work: Best May-October (can work Nov-Apr but add cost)
+- Interior work: Year-round (once building is dried-in)
+
+MATERIAL LEAD TIMES (order during design phase or delay construction):
+- Windows: 8-12 weeks (must order by Step 4)
+- Standing seam metal: 10-14 weeks (must order by Step 4)
+- Cabinets: 6-10 weeks (order after client selects in Step 2)
+- Special-order fixtures/finishes: 4-8 weeks
+- Engineered lumber (TJIs, LVLs): 3-5 weeks
+
+SUBCONTRACTOR AVAILABILITY:
+- Good framers: Book 8-12 weeks in advance
+- Good finish carpenters: Book 6-8 weeks in advance
+- Electricians/Plumbers: Book 4-6 weeks in advance
+- Drywall crews: Book 3-4 weeks in advance
+
+SEQUENCING DEPENDENCIES (you know this by heart):
+1. Can't pour foundation until: Frost out + excavation done + footing inspection
+2. Can't frame until: Foundation cured 7 days + foundation inspection
+3. Can't rough MEP until: Framing complete + framing inspection
+4. Can't insulate until: MEP roughed-in + rough inspections passed
+5. Can't drywall until: Insulation inspected
+6. Can't install finishes until: Drywall complete
+7. MUST dry-in before winter (or add $8k-15k heated enclosure)
+
+INSPECTION HOLD POINTS (Flathead County):
+- Footing inspection (before concrete pour)
+- Foundation inspection (before backfill)
+- Framing inspection (before insulation)
+- Rough plumbing inspection (before cover)
+- Rough electrical inspection (before cover)
+- Rough mechanical inspection (before cover)
+- Insulation inspection (before drywall)
+- Final inspection (before occupancy)
+
+BUILD A REALISTIC SCHEDULE with:
+- Actual calendar dates (not "Month 1") - start from permit approval
+- Week-by-week breakdown
+- Critical path items flagged
+- Material delivery dates
+- Sub booking deadlines
+- Inspection hold points
+- Weather window constraints
+- Client decision deadlines
+- Risk buffers (Montana = expect delays)
+
+Include both DESIGN PHASE timeline and CONSTRUCTION PHASE timeline.
+Show realistic durations - you've built 400 homes, you know how long things ACTUALLY take.
+
+Return ONLY: {"designPhase":"10-14 weeks","constructionPhase":"X-Y months","startToFinish":"total project duration","milestones":[{"phase":"Week 1-2: Initial Consultation","duration":"2 weeks","notes":"2 client meetings, site analysis, vision development","type":"design"},{"phase":"Foundation","duration":"3 weeks","notes":"Must start after May 15 (frost out), includes footing inspection hold","type":"construction"}]}
+
+Use type "design" for Steps 1-4, "construction" for build phase.`
+      }], SYSTEM, 2000);
       scheduleResult = safeJSON(schedRaw, "schedule");
-    } catch(e){ console.warn("Schedule failed:", e.message); }
+    } catch(e){ 
+      console.warn("Schedule failed:", e.message);
+      scheduleResult = {
+        startToFinish: `${gcResult.gcMonths||3}-${(gcResult.gcMonths||3)+1} months construction (plus 10-14 weeks design)`,
+        milestones: []
+      };
+    }
 
     // Calculate final totals
     const totalLow  = subtotalLow  + (gcResult.gcLow||0);
@@ -388,6 +715,8 @@ Return ONLY: {"startToFinish":"X-Y months","milestones":[{"phase":"name","durati
       totalHigh,
       summary:            gcResult.summary||"",
       complianceNotes:    gcResult.complianceNotes||[],
+      complianceAnalysis: complianceResult||"",
+      siteAnalysis:       siteNotes||"",
       schedule:           scheduleResult
     };
 
@@ -1092,6 +1421,16 @@ function renderEstimate(){
           </div>
         </div>
       `).join("")}
+    </div>`:""}
+    ${est.siteAnalysis?`
+    <div class="card">
+      <div class="section-title">📸 Site Analysis (From Photos)</div>
+      <p style="font-size:13px;color:var(--cream-dk);line-height:1.8;white-space:pre-wrap;">${esc(est.siteAnalysis)}</p>
+    </div>`:""}
+    ${est.complianceAnalysis?`
+    <div class="card" style="border-color:rgba(201,168,76,0.5);">
+      <div class="section-title" style="color:var(--gold);">📋 Code Compliance & Permitting Review</div>
+      <p style="font-size:13px;color:var(--cream-dk);line-height:1.8;white-space:pre-wrap;">${esc(est.complianceAnalysis)}</p>
     </div>`:""}
     ${est.complianceNotes&&est.complianceNotes.length?`
     <div class="card" style="border-color:rgba(201,168,76,0.5);">
