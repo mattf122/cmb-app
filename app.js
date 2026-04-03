@@ -347,11 +347,29 @@ Duration: 1 month per $50k (minimum 3 months)
 GC items: permit, engineering, superintendent, temp facilities, dumpsters, builder risk insurance, 5% contingency
 
 Return ONLY this JSON — do NOT recalculate the subtotal:
-{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence project summary","complianceNotes":["key code or contractor note"],"schedule":{"totalMonths":0,"startToFinish":"e.g. 8-10 months","milestones":[{"phase":"Site Prep & Foundation","duration":"4-6 weeks","notes":"frost line 48in, cure time"},{"phase":"Framing","duration":"4-6 weeks","notes":""},{"phase":"Rough-ins (MEP)","duration":"3-5 weeks","notes":"runs parallel"},{"phase":"Insulation & Drywall","duration":"2-4 weeks","notes":""},{"phase":"Interior Finishes","duration":"4-8 weeks","notes":""},{"phase":"Exterior & Site","duration":"3-5 weeks","notes":"weather dependent"},{"phase":"Punch List & CO","duration":"2-3 weeks","notes":""}]}}`
+{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence summary","complianceNotes":["note"]}`
     }], SYSTEM, 400);
     const gcResult = safeJSON(gcRaw, "gc-totals");
 
-    // Calculate final totals by adding GC to zone subtotals — single source of truth
+    // ── CALL 5: Construction Schedule ────────────────────────────────
+    btn.textContent = "⏳ Step 5 of 5 — Building schedule…";
+    let scheduleResult = null;
+    try {
+      const schedRaw = await workerCall([{role:"user", content:
+        `Build a construction schedule for this Montana project.
+Zones: ${zoneList}
+Total budget: ${fmt$(subtotalLow + (gcResult.gcLow||0))} – ${fmt$(subtotalHigh + (gcResult.gcHigh||0))}
+Duration: ${gcResult.gcMonths||3} months
+${qaContext?"Project Q&A:\n"+qaContext:""}
+
+Montana factors: 48-inch frost line, no concrete below 20F, standing seam lead time 8-12 weeks, window lead time 6-10 weeks, subcontractor availability tight in Flathead Valley.
+
+Return ONLY: {"startToFinish":"X-Y months","milestones":[{"phase":"name","duration":"X weeks","notes":"brief note"}]}`
+      }], SYSTEM, 500);
+      scheduleResult = safeJSON(schedRaw, "schedule");
+    } catch(e){ console.warn("Schedule failed:", e.message); }
+
+    // Calculate final totals
     const totalLow  = subtotalLow  + (gcResult.gcLow||0);
     const totalHigh = subtotalHigh + (gcResult.gcHigh||0);
 
@@ -370,7 +388,7 @@ Return ONLY this JSON — do NOT recalculate the subtotal:
       totalHigh,
       summary:            gcResult.summary||"",
       complianceNotes:    gcResult.complianceNotes||[],
-      schedule:           gcResult.schedule||null
+      schedule:           scheduleResult
     };
 
     appData.estimate = estimate;
