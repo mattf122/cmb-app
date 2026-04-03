@@ -26,6 +26,8 @@ let appData = {
   projectNotes: "", zones: [], estimate: null,
   concepts: {}, retainerAmount: "", clientSig: null, repSig: null,
   clientPrintName: "", repPrintName: ""
+,
+  clarifyingQuestions: [], clarifyingAnswers: {}
 };
 
 // ── Settings ────────────────────────────────────────────────────────
@@ -95,6 +97,110 @@ async function callClaude(prompt, system){
   if(data.error) throw new Error(data.error.message);
   if(!data.content || !data.content[0]) throw new Error("Empty response");
   return data.content[0].text || "";
+}
+
+async function runAnalyzeScope(){
+  const btn = document.getElementById("analyze-btn");
+  const err = document.getElementById("analyze-error");
+  const status = document.getElementById("analyze-status");
+  btn.disabled = true;
+  btn.textContent = "⏳ Analyzing…";
+  err.classList.add("hidden");
+
+  try {
+    const zones = appData.zones;
+    const zoneList = zones.map(z =>
+      `${z.type} | ${z.sqft||"unknown"} SF | ${z.notes||"no notes"}`
+    ).join("\n");
+
+    // Build vision content with all available photos
+    const visionContent = [];
+    const photosAdded = [];
+
+    for(const zone of zones){
+      for(const photo of (zone.photosBefore||[]).slice(0,2)){
+        const c = await compressImage(photo, 600, 0.6);
+        visionContent.push({type:"text", text:`[${zone.type} — existing condition]:`});
+        visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+        photosAdded.push(zone.type);
+      }
+      for(const photo of (zone.photosInspo||[]).slice(0,1)){
+        const c = await compressImage(photo, 600, 0.6);
+        visionContent.push({type:"text", text:`[${zone.type} — client inspiration]:`});
+        visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+      }
+    }
+    const allDocs = getAllDocs();
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)){
+      const c = await compressImage(doc.dataUrl, 600, 0.6);
+      visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
+      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    }
+
+    const analysisPrompt = `You are an experienced construction manager with 30 years building residential and commercial projects in Northwest Montana. You are reviewing a site visit for a potential project.
+
+PROJECT ZONES:
+${zoneList}
+
+OVERALL NOTES: ${appData.projectNotes||"none"}
+SITE ADDRESS: ${appData.projectAddress||"unknown"}, ${appData.projectCity||"Montana"}
+${visionContent.length > 0 ? "Photos are attached above — analyze them carefully." : "No photos provided."}
+
+Based on everything you can see and read, identify what information you already know and what critical information is MISSING that you need to build an accurate estimate and construction schedule.
+
+Think like a CM preparing to build this project — what do you need to know about:
+- Site conditions (slope, soil, access, utilities at road)
+- Foundation type (slab/crawl/basement)
+- Structure specifics (roof pitch, ceiling heights, load-bearing walls)
+- Mechanical systems (well/city water, septic/sewer, propane/electric/gas, heating system type)
+- Site work (driveway, landscaping, retaining walls)
+- Timeline constraints (start date, occupancy deadline, winter work)
+- Any special conditions visible in photos
+
+Generate up to 10 focused questions — only ask what you genuinely cannot determine from the photos and notes. Ask the most critical questions first. Make each question specific and answerable on-site in 30 seconds.
+
+Return ONLY this JSON:
+{"questions":[{"id":"q1","question":"Your question here?","type":"text","options":[]},{"id":"q2","question":"Yes/no question?","type":"yesno","options":[]},{"id":"q3","question":"Multiple choice?","type":"choice","options":["Option A","Option B","Option C"]}]}
+
+Use type "text" for open answers, "yesno" for yes/no, "choice" for multiple choice with options array.`;
+
+    visionContent.push({type:"text", text:analysisPrompt});
+
+    if(status) status.textContent = "Analyzing photos and scope…";
+
+    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:1200,
+        messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}]
+      })
+    });
+
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    if(!data.content?.[0]?.text) throw new Error("No response from analysis");
+
+    const raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
+    if(start===-1) throw new Error("Could not parse questions");
+    const result = JSON.parse(raw.slice(start,end+1));
+
+    appData.clarifyingQuestions = result.questions||[];
+    appData.clarifyingAnswers = {};
+
+    if(status) status.textContent = "";
+    btn.textContent = "↻ Re-analyze";
+    btn.disabled = false;
+    render();
+
+  } catch(e){
+    err.textContent = "Error: " + e.message;
+    err.classList.remove("hidden");
+    btn.disabled = false;
+    btn.textContent = "⚡ Analyze & Ask";
+    if(status) status.textContent = "";
+  }
 }
 
 async function runGenerateEstimate(){
@@ -196,6 +302,12 @@ Respond ONLY with the exact JSON format requested. No markdown. No explanation.`
       }
     }
 
+    // ── Build Q&A context ────────────────────────────────────────────
+    const qaContext = (appData.clarifyingQuestions||[]).map(q => {
+      const ans = (appData.clarifyingAnswers||{})[q.id];
+      return ans ? `Q: ${q.question}\nA: ${ans}` : null;
+    }).filter(Boolean).join("\n");
+
     // ── CALL 2: Zone totals ───────────────────────────────────────────
     btn.textContent = "⏳ Step 2 of 4 — Pricing zones…";
     const zoneRaw = await workerCall([{role:"user", content:
@@ -204,6 +316,7 @@ Zones:
 ${zoneList}
 ${siteNotes?"Site observations: "+siteNotes:""}
 Notes: ${appData.projectNotes||"none"}
+${qaContext?"Pre-construction Q&A:\n"+qaContext:""}
 
 Return ONLY: {"zones":[{"name":"zone name","low":0,"high":0,"notes":"brief scope note"}]}`
     }], SYSTEM, 800);
@@ -233,8 +346,8 @@ Base construction subtotal (already calculated): ${fmt$(subtotalLow)} low / ${fm
 Duration: 1 month per $50k (minimum 3 months)
 GC items: permit, engineering, superintendent, temp facilities, dumpsters, builder risk insurance, 5% contingency
 
-Return ONLY these numbers — do NOT recalculate the subtotal:
-{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence project summary","complianceNotes":["key code or contractor note"]}`
+Return ONLY this JSON — do NOT recalculate the subtotal:
+{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence project summary","complianceNotes":["key code or contractor note"],"schedule":{"totalMonths":0,"startToFinish":"e.g. 8-10 months","milestones":[{"phase":"Site Prep & Foundation","duration":"4-6 weeks","notes":"frost line 48in, cure time"},{"phase":"Framing","duration":"4-6 weeks","notes":""},{"phase":"Rough-ins (MEP)","duration":"3-5 weeks","notes":"runs parallel"},{"phase":"Insulation & Drywall","duration":"2-4 weeks","notes":""},{"phase":"Interior Finishes","duration":"4-8 weeks","notes":""},{"phase":"Exterior & Site","duration":"3-5 weeks","notes":"weather dependent"},{"phase":"Punch List & CO","duration":"2-3 weeks","notes":""}]}}`
     }], SYSTEM, 400);
     const gcResult = safeJSON(gcRaw, "gc-totals");
 
@@ -256,7 +369,8 @@ Return ONLY these numbers — do NOT recalculate the subtotal:
       totalLow,
       totalHigh,
       summary:            gcResult.summary||"",
-      complianceNotes:    gcResult.complianceNotes||[]
+      complianceNotes:    gcResult.complianceNotes||[],
+      schedule:           gcResult.schedule||null
     };
 
     appData.estimate = estimate;
@@ -945,6 +1059,54 @@ function renderScope(){
       <div class="field"><label class="field-label">Overall Project Notes</label><textarea placeholder="General observations, priorities, timeline, special conditions…" oninput="appData.projectNotes=this.value">${esc(appData.projectNotes)}</textarea></div>
       ${docSection("project","project","Project Documents (Drawings, Specs, Plans)")}
     </div>
+
+    ${appData.zones.length > 0 ? `
+    <div class="card-copper">
+      <div class="section-title">⚡ AI Site Analysis</div>
+      <p style="font-size:13px;color:var(--cream-dk);line-height:1.7;margin-bottom:12px;">
+        Claude will analyze your photos, notes, and documents, then ask up to 10 targeted questions to fill in any gaps before estimating.
+      </p>
+      <div id="analyze-error" class="error-msg hidden"></div>
+      <p id="analyze-status" style="font-size:13px;color:var(--gold);min-height:18px;margin-bottom:8px;"></p>
+      <button id="analyze-btn" class="btn-secondary" onclick="runAnalyzeScope()">⚡ Analyze & Ask</button>
+    </div>
+
+    ${(appData.clarifyingQuestions||[]).length > 0 ? `
+    <div class="card">
+      <div class="section-title">Pre-Estimate Questions</div>
+      <p style="font-size:12px;color:var(--stone-light);margin-bottom:14px;">Answer these before generating the estimate for best accuracy.</p>
+      ${appData.clarifyingQuestions.map((q,qi) => `
+        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(92,88,80,0.3);">
+          <p style="font-size:13px;color:var(--cream);margin-bottom:8px;line-height:1.5;">${qi+1}. ${esc(q.question)}</p>
+          ${q.type==="yesno" ? `
+            <div style="display:flex;gap:8px;">
+              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="Yes"?"active":""}"
+                onclick="appData.clarifyingAnswers['${q.id}']='Yes';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="Yes"?"background:var(--copper);color:var(--charcoal);":""}">Yes</button>
+              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="No"?"active":""}"
+                onclick="appData.clarifyingAnswers['${q.id}']='No';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="No"?"background:var(--copper);color:var(--charcoal);":""}">No</button>
+              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="Unknown"?"active":""}"
+                onclick="appData.clarifyingAnswers['${q.id}']='Unknown';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="Unknown"?"background:var(--stone-light);":""}">Unknown</button>
+            </div>
+          ` : q.type==="choice" ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${(q.options||[]).map(opt=>`
+                <button class="btn-small"
+                  onclick="appData.clarifyingAnswers['${q.id}']='${opt.replace(/'/g,"\\'")}';render()"
+                  style="${(appData.clarifyingAnswers||{})[q.id]===opt?"background:var(--copper);color:var(--charcoal);":""}">
+                  ${esc(opt)}
+                </button>
+              `).join("")}
+            </div>
+          ` : `
+            <textarea style="min-height:60px;font-size:13px;"
+              placeholder="Your answer…"
+              oninput="appData.clarifyingAnswers['${q.id}']=this.value">${esc((appData.clarifyingAnswers||{})[q.id]||"")}</textarea>
+          `}
+        </div>
+      `).join("")}
+    </div>
+    ` : ""}
+    ` : ""}
     ${zones.map((z,i)=>`
       <div class="zone-card">
         <div class="zone-header"><span class="zone-label">Zone ${i+1}</span><button class="btn-danger" onclick="appData.zones=appData.zones.filter(x=>x.id!=='${z.id}');render()">Remove</button></div>
@@ -1067,6 +1229,23 @@ function renderEstimate(){
         <p class="retainer-suggestion">Suggested: ${fmt$(suggested)} based on project size</p>
       </div>
     </div>
+    ${est.schedule?`
+    <div class="card">
+      <div class="section-title">Construction Schedule</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(184,115,51,0.3);margin-bottom:10px;">
+        <span style="font-size:13px;color:var(--cream-dk);">Estimated Duration</span>
+        <span style="font-size:14px;color:var(--gold);font-weight:bold;">${esc(est.schedule.startToFinish||est.schedule.totalMonths+" months")}</span>
+      </div>
+      ${(est.schedule.milestones||[]).map((m,mi)=>`
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:6px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
+          <span style="font-size:11px;color:var(--copper);font-weight:bold;min-width:20px;">${mi+1}</span>
+          <div style="flex:1;">
+            <div style="font-size:13px;color:var(--cream);">${esc(m.phase)}</div>
+            <div style="font-size:11px;color:var(--stone-light);">${esc(m.duration)}${m.notes?" — "+esc(m.notes):""}</div>
+          </div>
+        </div>
+      `).join("")}
+    </div>`:""}
     ${est.complianceNotes&&est.complianceNotes.length?`
     <div class="card" style="border-color:rgba(201,168,76,0.5);">
       <div class="section-title" style="color:var(--gold);">⚠ Contractor & Code Notes (Rep Only)</div>
