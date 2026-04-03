@@ -1,6 +1,6 @@
 
 // ── State ──────────────────────────────────────────────────────────
-const STEPS = ["Client","Scope","Estimate","Concepts","Review & Sign"];
+const STEPS = ["Client","Scope","Estimate","Review & Sign"];
 const ZONE_TYPES = [
   "Bathroom Remodel","Kitchen Remodel","Laundry Room","Master Suite",
   "Living Room","Bedroom","Office / Den","Mudroom","Garage",
@@ -24,7 +24,7 @@ let appData = {
   clientAddress: "", clientCity: "", clientZip: "",
   projectAddress: "", projectCity: "",
   projectNotes: "", zones: [], estimate: null,
-  concepts: {}, retainerAmount: "", clientSig: null, repSig: null,
+  retainerAmount: "", clientSig: null, repSig: null,
   clientPrintName: "", repPrintName: ""
 ,
   clarifyingQuestions: [], clarifyingAnswers: {}
@@ -404,113 +404,6 @@ Return ONLY: {"startToFinish":"X-Y months","milestones":[{"phase":"name","durati
   }
 }
 
-async function runGenerateConcepts(){
-  const btn = document.getElementById("concept-btn");
-  const err = document.getElementById("concept-error");
-  const statusEl = document.getElementById("concept-status");
-  btn.disabled = true; btn.textContent = "⏳ Analyzing…";
-  err.classList.add("hidden");
-
-  try {
-    for(let i=0; i<appData.zones.length; i++){
-      const zone = appData.zones[i];
-      if(statusEl) statusEl.textContent = `Analyzing zone ${i+1} of ${appData.zones.length}: ${zone.type}…`;
-
-      const system = `You are a senior design-build consultant at Copper Mountain Builders in Montana. 
-You analyze site visit photos and project notes to write a specific, vivid before-and-after design concept for client proposals.
-Your output has two parts:
-1. DESCRIPTION: Exactly 2-3 sentences that describe the transformation — reference what exists now and paint a picture of the finished result. Be specific to THIS project, not generic.
-2. IMAGE_PROMPT: A detailed text-to-image prompt (50-80 words) for generating a photorealistic concept rendering of the FINISHED space. Include room type, finish level, specific materials, lighting, style, and "Montana home, photorealistic interior rendering, professional architectural photography" at the end.
-
-Format your response EXACTLY like this:
-DESCRIPTION: [your 2-3 sentences here]
-IMAGE_PROMPT: [your detailed image generation prompt here]`;
-
-      // Build content array with photos
-      const msgContent = [];
-
-      // Add before photos (compressed)
-      if(zone.photosBefore && zone.photosBefore.length > 0){
-        msgContent.push({type:"text", text:`BEFORE PHOTOS (current conditions):`});
-        for(const photo of zone.photosBefore.slice(0,2)){
-          const compressed = await compressImage(photo, 800, 0.65);
-          const b64 = compressed.split(",")[1];
-          msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
-        }
-      }
-
-      // Add inspiration photos (compressed)
-      if(zone.photosInspo && zone.photosInspo.length > 0){
-        msgContent.push({type:"text", text:`CLIENT INSPIRATION PHOTOS:`});
-        for(const photo of zone.photosInspo.slice(0,2)){
-          const compressed = await compressImage(photo, 800, 0.65);
-          const b64 = compressed.split(",")[1];
-          msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
-        }
-      }
-
-      // Add zone documents (images only, compressed)
-      const zoneDocs = (zone.docs||[]).filter(d=>d.type.includes("image"));
-      for(const doc of zoneDocs.slice(0,1)){
-        msgContent.push({type:"text", text:`ATTACHED DRAWING/SKETCH:`});
-        const compressed = await compressImage(doc.dataUrl, 800, 0.65);
-        const b64 = compressed.split(",")[1];
-        msgContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}});
-      }
-
-      // Add text context
-      const contextText = `
-Zone type: ${zone.type}
-Finish level: Designer
-Scope of work: ${zone.notes||"Standard scope remodel"}
-${appData.projectNotes?"Overall project notes: "+appData.projectNotes:""}
-${zone.docs&&zone.docs.length>0?"Referenced documents: "+zone.docs.map(d=>d.name).join(", "):""}
-
-${msgContent.length > 0 ? "Analyze the photos above carefully." : "No photos were uploaded for this zone."}
-Write the DESCRIPTION and IMAGE_PROMPT as instructed.`;
-
-      msgContent.push({type:"text", text:contextText});
-
-      // Call API with vision if photos exist, text-only if not
-      let raw;
-      if(msgContent.length > 1){
-        const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            model:"claude-haiku-4-5-20251001",
-            max_tokens:1000,
-            system,
-            messages:[{role:"user", content:msgContent}]
-          })
-        });
-        if(!res.ok) throw new Error("Server error: "+res.status);
-        const data = await res.json();
-        if(data.error) throw new Error(data.error.message);
-        raw = data.content[0].text;
-      } else {
-        raw = await callClaude(contextText, system);
-      }
-
-      // Parse DESCRIPTION and IMAGE_PROMPT from response
-      const descMatch = raw.match(/DESCRIPTION:\s*(.+?)(?=IMAGE_PROMPT:|$)/s);
-      const imgMatch  = raw.match(/IMAGE_PROMPT:\s*(.+?)$/s);
-
-      appData.concepts[zone.id] = descMatch ? descMatch[1].trim() : raw.trim();
-      if(!appData.conceptPrompts) appData.conceptPrompts = {};
-      appData.conceptPrompts[zone.id] = imgMatch ? imgMatch[1].trim() : buildImagePrompt(zone);
-    }
-
-    if(statusEl) statusEl.textContent = "";
-    render();
-  } catch(e){
-    err.textContent = "Error: " + e.message;
-    err.classList.remove("hidden");
-    btn.disabled = false;
-    btn.textContent = "✦ Generate Design Concepts";
-    if(statusEl) statusEl.textContent = "";
-  }
-}
-
 // ── Expand section line items on demand ──────────────────────────────
 async function expandSection(sectionIdx){
   const btn = document.getElementById("expand-btn-"+sectionIdx);
@@ -564,67 +457,6 @@ Return ONLY this JSON array (4-6 items, real 2026 Flathead Valley CMB pricing, h
   }
 }
 
-// ── Image Generation (Pollinations.ai — free, no API key) ─────────────────
-function buildImagePrompt(zone){
-  const finishMap = {
-    "Essential": "clean modern finishes, quality materials, functional design",
-    "Designer": "high-end finishes, custom details, elevated design, designer fixtures",
-    "Luxury": "luxury finishes, bespoke custom millwork, top-of-market materials, premium everything"
-  };
-  const finish = finishMap["Designer"];
-  const notes = zone.notes ? `, ${zone.notes}` : "";
-  return `photorealistic interior rendering of a beautifully renovated ${zone.type} in a Montana home, ${finish}${notes}, professional architectural photography, bright natural light, warm inviting atmosphere, high resolution`;
-}
-
-async function generateConceptImage(zone){
-  // Use Claude-written image prompt if available, fallback to generic
-  const rawPrompt = (appData.conceptPrompts && appData.conceptPrompts[zone.id])
-    ? appData.conceptPrompts[zone.id]
-    : buildImagePrompt(zone);
-  const prompt = encodeURIComponent(rawPrompt);
-  const negPrompt = encodeURIComponent("ugly, blurry, low quality, distorted, dark, dirty, cluttered, construction mess, unfinished, messy");
-  const seed = Math.floor(Math.random() * 999999);
-  const url = `https://image.pollinations.ai/prompt/${prompt}?negative=${negPrompt}&width=768&height=512&seed=${seed}&nologo=true&enhance=true`;
-  return url;
-}
-
-async function runGenerateImages(){
-  const btn = document.getElementById("img-gen-btn");
-  const err = document.getElementById("img-gen-error");
-  const status = document.getElementById("img-gen-status");
-  if(btn) btn.disabled = true;
-  if(err) err.classList.add("hidden");
-
-  if(!appData.conceptImages) appData.conceptImages = {};
-
-  for(let i = 0; i < appData.zones.length; i++){
-    const zone = appData.zones[i];
-    if(status) status.textContent = `Generating image ${i+1} of ${appData.zones.length}…`;
-    try {
-      const imgUrl = await generateConceptImage(zone);
-      // Pre-load the image
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = resolve; // don't fail on error, just continue
-        img.src = imgUrl;
-        setTimeout(resolve, 20000); // 20s max per image
-      });
-      appData.conceptImages[zone.id] = imgUrl;
-
-      // Update just this zone's image inline without full re-render
-      const imgContainer = document.getElementById("concept-img-"+zone.id);
-      if(imgContainer){
-        imgContainer.innerHTML = `<img src="${imgUrl}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);margin-top:8px;" alt="Concept rendering"/>`;
-      }
-    } catch(e){
-      console.error("Image gen failed for zone", zone.id, e);
-    }
-  }
-
-  if(status) status.textContent = "✓ Images generated";
-  if(btn){ btn.disabled=false; btn.textContent="↻ Regenerate Images"; }
-}
 
 // ── Document handling ─────────────────────────────────────────────────
 async function handleDocuments(e, targetId, targetType){
@@ -679,9 +511,6 @@ function autoSave(){
       photosInspo:  (z.photosInspo||[]).map((_,i) => `[photo ${i+1}]`),
       docs: (z.docs||[]).map(d => ({...d, dataUrl: null}))
     }));
-    snapshot.conceptImages = Object.fromEntries(
-      Object.entries(snapshot.conceptImages||{}).map(([k,v]) => [k, v ? "[image]" : null])
-    );
     snapshot._step = currentStep;
     snapshot._savedAt = new Date().toISOString();
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshot));
@@ -1277,52 +1106,8 @@ function renderEstimate(){
     </div>`:""}
     <div id="est-error" class="error-msg hidden"></div>
     <button class="btn-secondary" onclick="appData.estimate=null;render()">↻ Regenerate</button>
-    <button class="btn-primary" onclick="goTo(3)">Next: Concept Designs →</button>
+    <button class="btn-primary" onclick="goTo(3)">Next: Review & Sign →</button>
     <button class="btn-secondary" onclick="goTo(1)">← Back</button>
-  </div>`;
-}
-
-function renderConcepts(){
-  const concepts = appData.concepts||{};
-  const hasAll = appData.zones.every(z=>concepts[z.id]);
-  return `<div class="page">
-    <div class="card-copper">
-      <div class="section-title">AI Design Concepts</div>
-      <p style="font-size:14px;color:var(--cream-dk);line-height:1.7;margin-bottom:16px;">Claude will write an inspiring design vision for each zone based on scope and finish level.</p>
-      <div id="concept-error" class="error-msg hidden"></div>
-      <p id="concept-status" style="font-size:13px;color:var(--gold);min-height:20px;margin-bottom:8px;"></p>
-      <button class="btn-primary" id="concept-btn" onclick="runGenerateConcepts()">✦ Generate Design Concepts</button>
-    </div>
-    ${appData.zones.map(z=>`
-      <div class="card">
-        <div style="color:var(--copper);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${esc(z.type)}</div>
-        ${concepts[z.id]?`
-          <textarea style="min-height:90px;" oninput="appData.concepts['${z.id}']=this.value">${esc(concepts[z.id])}</textarea>
-          <div id="concept-img-${z.id}" style="margin-top:8px;">
-            ${appData.conceptImages&&appData.conceptImages[z.id]?`
-              <img src="${appData.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);" alt="Concept rendering"/>
-            `:""}
-          </div>
-          ${z.photosInspo&&z.photosInspo.length?`<div class="img-row" style="margin-top:8px;">${z.photosInspo.map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
-        `:`<p style="color:var(--stone-light);font-size:13px;font-style:italic;">Tap Generate Concepts above first</p>`}
-      </div>
-    `).join("")}
-
-    ${hasAll?`
-    <div class="card-copper">
-      <div class="section-title">Step 2 — AI Concept Images</div>
-      <p style="font-size:13px;color:var(--cream-dk);line-height:1.7;margin-bottom:10px;">
-        Generate a concept rendering for each zone based on the descriptions above. Images appear in the printed proposal.
-      </p>
-      <div id="img-gen-error" class="error-msg hidden"></div>
-      <p id="img-gen-status" style="font-size:13px;color:var(--gold);min-height:20px;margin-bottom:8px;"></p>
-      <button class="btn-secondary" id="img-gen-btn" onclick="runGenerateImages()">
-        ${Object.keys(appData.conceptImages||{}).length > 0 ? "↻ Regenerate Concept Images" : "✦ Generate Concept Images"}
-      </button>
-    </div>
-    <button class="btn-primary" onclick="goTo(4)">Next: Review & Sign →</button>
-    `:`<button class="btn-primary" disabled style="opacity:0.5">Generate Concepts First</button>`}
-    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 }
 
@@ -1348,17 +1133,6 @@ function renderReview(){
       <div class="estimate-row" style="border:none;padding-top:12px;"><span style="font-weight:bold;font-size:14px;">TOTAL RANGE</span><span style="font-weight:bold;font-size:16px;color:var(--gold);">${fmt$(est.totalLow)} – ${fmt$(est.totalHigh)}</span></div>
       <div class="estimate-row"><span style="font-size:13px;color:var(--copper-lt);">Design Retainer</span><span style="color:var(--copper-lt);font-size:14px;">${fmt$(d.retainerAmount||0)}</span></div>
     </div>`:""}
-    <div class="card">
-      <div class="section-title">Zone Concepts</div>
-      ${(d.zones||[]).map(z=>`
-        <div style="margin-bottom:20px;">
-          <div style="color:var(--copper);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${esc(z.type)}</div>
-          ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:var(--cream-dk);line-height:1.8;margin-bottom:8px;">${esc(d.concepts[z.id])}</p>`:""}
-          ${d.conceptImages&&d.conceptImages[z.id]?`<img src="${d.conceptImages[z.id]}" style="width:100%;border-radius:8px;border:1px solid var(--stone-light);margin-bottom:6px;" alt="Concept"/>`:""}
-          ${z.photosInspo&&z.photosInspo.length?`<div class="img-row">${z.photosInspo.slice(0,2).map(s=>`<img src="${s}" class="img-thumb" alt=""/>`).join("")}</div>`:""}
-        </div>
-      `).join("")}
-    </div>
     <div class="card" style="border-color:rgba(184,115,51,0.4);">
       <div class="section-title">Design-Build Agreement</div>
       <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;margin-bottom:16px;max-height:400px;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
@@ -1418,7 +1192,7 @@ function renderReview(){
       <button class="btn-secondary" onclick="downloadVisitJSON()" style="margin-bottom:8px;">💾 Download Full Visit Data</button>
       <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
     </div>
-    <button class="btn-secondary" onclick="goTo(3)">← Back</button>
+    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 }
 
@@ -1498,13 +1272,6 @@ function renderPrintDoc(){
     </div>`:""}
     ${(d.zones||[]).map(z=>`<div style="margin-bottom:24px;page-break-inside:avoid;">
       <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#b87333;margin-bottom:8px;border-bottom:1px solid #e0d0b0;padding-bottom:4px;">${esc(z.type)}</div>
-      ${d.concepts&&d.concepts[z.id]?`<p style="font-size:13px;color:#444;line-height:1.8;margin-bottom:12px;">${esc(d.concepts[z.id])}</p>`:""}
-      ${d.conceptImages&&d.conceptImages[z.id]?`
-        <div style="margin-bottom:12px;">
-          <img src="${d.conceptImages[z.id]}" style="width:100%;max-height:280px;object-fit:cover;border-radius:8px;border:1px solid #e0d0b0;" alt="AI Concept Rendering"/>
-          <p style="font-size:10px;color:#aaa;margin-top:4px;font-style:italic;">AI-generated conceptual rendering — for visualization purposes only</p>
-        </div>
-      `:""}
       ${z.photosInspo&&z.photosInspo.length?`
         <div>
           <p style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#b87333;margin-bottom:6px;">Client Inspiration</p>
@@ -1575,12 +1342,11 @@ function render(){
   if(currentStep===0) html = renderClient();
   else if(currentStep===1) html = renderScope();
   else if(currentStep===2) html = renderEstimate();
-  else if(currentStep===3) html = renderConcepts();
-  else if(currentStep===4) html = renderReview();
+  else if(currentStep===3) html = renderReview();
   html += renderPrintDoc();
   app.innerHTML = html;
   updateHeader();
-  if(currentStep===4){
+  if(currentStep===3){
     setTimeout(()=>{ initSigPad("sig_client","clientSig"); initSigPad("sig_rep","repSig"); }, 50);
   }
   // Restore scroll position after render
