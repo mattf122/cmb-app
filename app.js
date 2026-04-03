@@ -223,34 +223,40 @@ Return ONLY: {"sections":[{"name":"trade name","low":0,"high":0}]}`
 
     // ── CALL 4: GC + totals ───────────────────────────────────────────
     btn.textContent = "⏳ Step 4 of 4 — Calculating totals…";
-    const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+z.low,  0);
-    const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+z.high, 0);
-    const gcRaw = await workerCall([{role:"user", content:
-      `Calculate general conditions and final totals for this Montana construction project.
-Project subtotal: ${fmt$(subtotalLow)} – ${fmt$(subtotalHigh)}
-Zones: ${zoneList}
-Duration: 1 month per $50k of cost (minimum 3 months)
+    // Use zone totals from Call 2 as the authoritative base — don't let Call 4 recalculate
+    const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+(z.low||0),  0);
+    const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+(z.high||0), 0);
 
-Return ONLY:
-{"gcLow":0,"gcHigh":0,"gcMonths":1,"overheadProfitLow":0,"overheadProfitHigh":0,"totalLow":0,"totalHigh":0,"summary":"2 sentence project summary","complianceNotes":["key code or contractor item to flag"]}`
-    }], SYSTEM, 600);
+    const gcRaw = await workerCall([{role:"user", content:
+      `Calculate ONLY the general conditions costs for this Montana construction project.
+Base construction subtotal (already calculated): ${fmt$(subtotalLow)} low / ${fmt$(subtotalHigh)} high
+Duration: 1 month per $50k (minimum 3 months)
+GC items: permit, engineering, superintendent, temp facilities, dumpsters, builder risk insurance, 5% contingency
+
+Return ONLY these numbers — do NOT recalculate the subtotal:
+{"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"2 sentence project summary","complianceNotes":["key code or contractor note"]}`
+    }], SYSTEM, 400);
     const gcResult = safeJSON(gcRaw, "gc-totals");
+
+    // Calculate final totals by adding GC to zone subtotals — single source of truth
+    const totalLow  = subtotalLow  + (gcResult.gcLow||0);
+    const totalHigh = subtotalHigh + (gcResult.gcHigh||0);
 
     // ── Combine results ───────────────────────────────────────────────
     const estimate = {
       zones:              zoneResult.zones,
       sections:           sectionResult.sections,
-      gcLow:              gcResult.gcLow,
-      gcHigh:             gcResult.gcHigh,
-      gcMonths:           gcResult.gcMonths,
+      gcLow:              gcResult.gcLow||0,
+      gcHigh:             gcResult.gcHigh||0,
+      gcMonths:           gcResult.gcMonths||3,
       subtotalLow,
       subtotalHigh,
-      overheadProfitLow:  gcResult.overheadProfitLow,
-      overheadProfitHigh: gcResult.overheadProfitHigh,
-      totalLow:           gcResult.totalLow,
-      totalHigh:          gcResult.totalHigh,
-      summary:            gcResult.summary,
-      complianceNotes:    gcResult.complianceNotes
+      overheadProfitLow:  0,
+      overheadProfitHigh: 0,
+      totalLow,
+      totalHigh,
+      summary:            gcResult.summary||"",
+      complianceNotes:    gcResult.complianceNotes||[]
     };
 
     appData.estimate = estimate;
