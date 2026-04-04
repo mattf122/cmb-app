@@ -1245,7 +1245,7 @@ function generateProposalDocument(){
         if(i > 0 && lines[i-1] && (lines[i-1].startsWith('-') || lines[i-1].startsWith('•'))) {
           html += '</ul>';
         }
-        html += \`<div class="analysis-heading">\${esc(line.replace(/:/g, ''))}</div>\`;
+        html += '<div class="analysis-heading">' + esc(line.replace(/:/g, '')) + '</div>';
         
         // Check if next lines are bullets - if so, start a list
         if(i < lines.length - 1 && (lines[i+1].startsWith('-') || lines[i+1].startsWith('•'))) {
@@ -1256,7 +1256,7 @@ function generateProposalDocument(){
         if(i === 0 || (!lines[i-1].startsWith('-') && !lines[i-1].startsWith('•') && !lines[i-1].match(/^[0-9]+\./))) {
           html += '<ul class="analysis-list">';
         }
-        html += \`<li>\${esc(line.replace(/^[-•]\s*/, '').replace(/^[0-9]+\.\s*/, ''))}</li>\`;
+        html += '<li>' + esc(line.replace(/^[-•]\s*/, '').replace(/^[0-9]+\.\s*/, '')) + '</li>';
         
         // Close list if next line is not a bullet
         if(i === lines.length - 1 || (!lines[i+1].startsWith('-') && !lines[i+1].startsWith('•') && !lines[i+1].match(/^[0-9]+\./))) {
@@ -1264,7 +1264,7 @@ function generateProposalDocument(){
         }
       } else {
         // Regular paragraph
-        html += \`<p class="analysis-paragraph">\${esc(line)}</p>\`;
+        html += '<p class="analysis-paragraph">' + esc(line) + '</p>';
       }
     }
     
