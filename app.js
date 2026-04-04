@@ -1250,7 +1250,7 @@ async function generateProposalBlob(){
           <td style="text-align:right;">${fmt$(z.low||0)}</td>
           <td style="text-align:right;">${fmt$(z.high||0)}</td>
         </tr>
-      `).join('')}
+      `).join('\n      ')}
       <tr style="border-top: 2px solid #B87333;">
         <td colspan="3"><strong>Construction Subtotal</strong></td>
         <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
@@ -1309,7 +1309,7 @@ async function generateProposalBlob(){
   <table>
     <thead><tr><th>Trade Section</th><th style="text-align:right;">Low</th><th style="text-align:right;">High</th></tr></thead>
     <tbody>
-      ${(est.sections||[]).map(s => `<tr><td>${esc(s.name)}</td><td style="text-align:right;">${fmt$(s.low||0)}</td><td style="text-align:right;">${fmt$(s.high||0)}</td></tr>`).join('')}
+      ${(est.sections||[]).map(s => `<tr><td>${esc(s.name)}</td><td style="text-align:right;">${fmt$(s.low||0)}</td><td style="text-align:right;">${fmt$(s.high||0)}</td></tr>`).join('\n      ')}
       <tr style="border-top: 2px solid #B87333;">
         <td><strong>Construction Subtotal</strong></td>
         <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
