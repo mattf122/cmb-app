@@ -1004,6 +1004,268 @@ async function odUploadFile(token, odPath, fileContent, mimeType){
   return res.json();
 }
 
+async function generateExcelBlob(){
+  const d = appData;
+  const est = d.estimate;
+  if(!est) return null;
+  
+  try {
+    // Auto-generate line items for sections that don't have them
+    for(let i=0; i<(est.sections||[]).length; i++){
+      const section = est.sections[i];
+      if(!section.lineItems || section.lineItems.length === 0){
+        const zone = appData.zones.map(z => `${z.type} ${z.sqft||""}SF Designer finish`).join(", ");
+        const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
+Project zones: ${zone}
+Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
+CSI: ${section.csiCode || getCsiInfo(section.name).csi}
+
+Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
+[{"description":"item name","unit":"SF","qty":1,"unitCostLow":0,"unitCostHigh":0,"totalLow":0,"totalHigh":0}]`;
+
+        try {
+          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              model:"claude-haiku-4-5-20251001", max_tokens:1500,
+              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include both unitCostLow/unitCostHigh and totalLow/totalHigh for each item.",
+              messages:[{role:"user", content:prompt}]
+            })
+          });
+          if(res.ok){
+            const data = await res.json();
+            let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+            const start = raw.indexOf("[");
+            const end = raw.lastIndexOf("]");
+            if(start!==-1 && end!==-1){
+              const items = JSON.parse(raw.slice(start, end+1));
+              est.sections[i].lineItems = items;
+            }
+          }
+        } catch(e){
+          console.warn(`Failed to generate line items for ${section.name}:`, e);
+        }
+      }
+    }
+    
+    // Build Excel workbook
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    
+    // Project header
+    wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
+    wsData.push([]);
+    wsData.push(["Client:", d.clientName||""]);
+    wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT ${d.clientZip||""}`]);
+    wsData.push(["Date:", new Date().toLocaleDateString()]);
+    wsData.push(["Rep:", d.repName||""]);
+    wsData.push(["Total Budget Range:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
+    wsData.push([]);
+    
+    // Zone summary
+    wsData.push(["ZONE SUMMARY"]);
+    wsData.push(["Zone Type", "Square Feet", "Finish Level"]);
+    (appData.zones||[]).forEach(z => {
+      wsData.push([z.type||"", z.sqft||"", z.finishLevel||""]);
+    });
+    wsData.push([]);
+    
+    // Column headers
+    wsData.push(["Item Description", "CSI Code", "Cost Code", "Type", "Qty", "Unit", "Unit Cost Low", "Unit Cost High", "Total Low", "Total High"]);
+    
+    // Sections
+    (est.sections||[]).forEach(section => {
+      wsData.push([section.name, section.csiCode||"", getCsiInfo(section.name).bt, "", "", "", "", "", "", ""]);
+      (section.lineItems||[]).forEach(item => {
+        wsData.push([
+          "  " + (item.description||""),
+          section.csiCode||"",
+          getCsiInfo(section.name).bt,
+          item.unit||"",
+          item.qty||0,
+          item.unit||"",
+          item.unitCostLow||0,
+          item.unitCostHigh||0,
+          item.totalLow||0,
+          item.totalHigh||0
+        ]);
+      });
+      wsData.push(["", "", "", "", "", "", "", "Section Total:", section.low||0, section.high||0]);
+      wsData.push([]);
+    });
+    
+    // General conditions
+    wsData.push(["GENERAL CONDITIONS (" + (est.gcMonths||3) + " months)"]);
+    const gcItems = est.generalConditions?.items || [];
+    if(gcItems.length){
+      gcItems.forEach(item => {
+        wsData.push([
+          "  " + (item.name||""),
+          "01 00 00",
+          "General Conditions",
+          "Other",
+          item.qty||1,
+          item.unit||"LS",
+          item.low||0,
+          item.high||0,
+          item.low||0,
+          item.high||0
+        ]);
+      });
+    }
+    wsData.push(["", "", "", "", "", "", "", "GC Total:", est.gcLow||0, est.gcHigh||0]);
+    wsData.push([]);
+    wsData.push([]);
+    
+    // Project totals
+    wsData.push(["PROJECT TOTALS"]);
+    wsData.push(["Construction Subtotal", "", "", "", "", "", "", "", est.subtotalLow||0, est.subtotalHigh||0]);
+    wsData.push(["General Conditions", "", "", "", "", "", "", "", est.gcLow||0, est.gcHigh||0]);
+    wsData.push(["", "", "", "", "", "", "", "", "", ""]);
+    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", est.totalLow||0, est.totalHigh||0]);
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [
+      {wch: 40}, {wch: 10}, {wch: 25}, {wch: 15}, {wch: 6},
+      {wch: 6}, {wch: 12}, {wch: 12}, {wch: 12}, {wch: 12}
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Estimate");
+    
+    // Return as blob instead of downloading
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    return new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    
+  } catch(e){
+    console.error("Excel generation failed:", e);
+    return null;
+  }
+}
+
+async function generateProposalBlob(){
+  const d = appData;
+  const est = d.estimate;
+  if(!est) return null;
+  
+  // Helper function to format analysis text
+  function formatAnalysis(text) {
+    if(!text) return '';
+    const lines = text.split('\n').filter(line => line.trim());
+    let html = '<div class="analysis-section">';
+    for(let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const isHeading = (line === line.toUpperCase() && line.length > 3 && line.length < 80) || (line.endsWith(':') && line.length < 100);
+      const isBullet = line.startsWith('-') || line.startsWith('•') || line.match(/^[0-9]+\./);
+      if(isHeading) {
+        if(i > 0 && lines[i-1] && (lines[i-1].startsWith('-') || lines[i-1].startsWith('•'))) html += '</ul>';
+        html += '<div class="analysis-heading">' + esc(line.replace(/:/g, '')) + '</div>';
+        if(i < lines.length - 1 && (lines[i+1].startsWith('-') || lines[i+1].startsWith('•'))) html += '<ul class="analysis-list">';
+      } else if(isBullet) {
+        if(i === 0 || (!lines[i-1].startsWith('-') && !lines[i-1].startsWith('•') && !lines[i-1].match(/^[0-9]+\./))) html += '<ul class="analysis-list">';
+        html += '<li>' + esc(line.replace(/^[-•]\s*/, '').replace(/^[0-9]+\.\s*/, '')) + '</li>';
+        if(i === lines.length - 1 || (!lines[i+1].startsWith('-') && !lines[i+1].startsWith('•') && !lines[i+1].match(/^[0-9]+\./))) html += '</ul>';
+      } else {
+        html += '<p class="analysis-paragraph">' + esc(line) + '</p>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+  
+  const dt = new Date().toLocaleDateString();
+  
+  // Create HTML document with Word-compatible formatting (same as generateProposalDocument)
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="Microsoft Word">
+  <meta name="Originator" content="Microsoft Word">
+  <style>
+    @page { size: 8.5in 11in; margin: 1in; }
+    body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.5; color: #2C2A27; margin: 0; padding: 20px; }
+    .cover-page { text-align: center; padding-top: 2in; page-break-after: always; }
+    .company-name { font-size: 24pt; font-weight: bold; color: #B87333; letter-spacing: 3px; margin-bottom: 20px; }
+    .doc-title { font-size: 18pt; font-weight: bold; color: #2C2A27; margin-bottom: 40px; }
+    .cover-info { font-size: 12pt; margin: 10px 0; }
+    h1 { font-size: 18pt; font-weight: bold; color: #B87333; margin-top: 30px; margin-bottom: 15px; page-break-after: avoid; }
+    h2 { font-size: 14pt; font-weight: bold; color: #2C2A27; margin-top: 20px; margin-bottom: 10px; }
+    p { margin: 10px 0; text-align: justify; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; page-break-inside: avoid; }
+    th { background-color: #B87333; color: white; font-weight: bold; padding: 10px; border: 1px solid #999; text-align: left; }
+    td { padding: 8px 10px; border: 1px solid #CCCCCC; }
+    tr:nth-child(even) { background-color: #F5F0E8; }
+    .total-row { background-color: #E6D5C3 !important; font-weight: bold; font-size: 13pt; }
+    .page-break { page-break-after: always; }
+    .analysis-section { margin: 15px 0; }
+    .analysis-heading { font-weight: bold; color: #B87333; margin: 15px 0 8px 0; font-size: 13pt; }
+    .analysis-list { margin-left: 20px; margin-top: 8px; margin-bottom: 12px; }
+    .analysis-paragraph { margin: 8px 0; text-align: justify; }
+    .sig-section { margin-top: 40px; page-break-inside: avoid; }
+    .sig-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="cover-page">
+    <div class="company-name">COPPER MOUNTAIN BUILDERS</div>
+    <div class="doc-title">CONCEPTUAL DESIGN BUILD ESTIMATE</div>
+    <div class="cover-info"><strong>Prepared For:</strong></div>
+    <div class="cover-info">${esc(d.clientName||"")}</div>
+    <div class="cover-info">${esc(d.projectAddress||"")}</div>
+    <div class="cover-info">${esc(d.projectCity||"")}, MT ${esc(d.clientZip||"")}</div>
+    <div class="cover-info" style="margin-top:40px;"><strong>Date:</strong> ${dt}</div>
+    <div class="cover-info"><strong>Prepared By:</strong> ${esc(d.repName||"")}</div>
+  </div>
+
+  <h1>Project Overview</h1>
+  <p>${esc(d.projectNotes || "No project notes provided.")}</p>
+
+  <h2>Zones</h2>
+  <table>
+    <thead><tr><th>Zone Type</th><th>Square Feet</th><th>Finish Level</th></tr></thead>
+    <tbody>
+      ${(appData.zones||[]).map(z => `<tr><td>${esc(z.type)}</td><td>${esc(z.sqft||"")}</td><td>${esc(z.finishLevel||"")}</td></tr>`).join('')}
+    </tbody>
+  </table>
+
+  ${est.analysis ? `
+  <div class="page-break"></div>
+  <h1>Scope Analysis</h1>
+  ${formatAnalysis(est.analysis)}
+  ` : ''}
+
+  <div class="page-break"></div>
+  <h1>Cost Breakdown by Trade</h1>
+  <table>
+    <thead><tr><th>Trade Section</th><th style="text-align:right;">Low</th><th style="text-align:right;">High</th></tr></thead>
+    <tbody>
+      ${(est.sections||[]).map(s => `<tr><td>${esc(s.name)}</td><td style="text-align:right;">${fmt$(s.low||0)}</td><td style="text-align:right;">${fmt$(s.high||0)}</td></tr>`).join('')}
+      <tr style="border-top: 2px solid #B87333;">
+        <td><strong>Construction Subtotal</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalHigh||0)}</strong></td>
+      </tr>
+      <tr>
+        <td>General Conditions (${est.gcMonths||3} months)</td>
+        <td style="text-align:right;">${fmt$(est.gcLow||0)}</td>
+        <td style="text-align:right;">${fmt$(est.gcHigh||0)}</td>
+      </tr>
+      <tr class="total-row" style="border-top: 2px solid #B87333;">
+        <td><strong>TOTAL PROJECT COST</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalHigh||0)}</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>`;
+
+  return new Blob([html], {type: 'application/msword'});
+}
+
 async function syncVisitToOneDrive(){
   if(!odAccount) return; // silently skip if not connected
 
@@ -1028,23 +1290,30 @@ async function syncVisitToOneDrive(){
     snap._odSyncedAt = new Date().toISOString();
     await odUploadFile(token, `${folder}/visit_${dateStr}.json`, JSON.stringify(snap, null, 2), "application/json");
 
-    // 2. Upload proposal HTML if estimate exists and at least one signature is captured
-    if(d.estimate && (d.clientSig || d.repSig)){
-      const printEl = document.getElementById("print-doc");
-      if(printEl){
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>${client} — Proposal</title>
-<style>body{font-family:Georgia,serif;padding:20px;max-width:800px;margin:0 auto;}img{max-width:100%;}</style>
-</head><body>${printEl.innerHTML}</body></html>`;
-        const fname = `${client}_Proposal_${dateStr}.html`;
-        await odUploadFile(token, `${folder}/${fname}`, html, "text/html");
+    // 2. Upload Word proposal document if estimate exists
+    if(d.estimate){
+      showOdToast("☁ Generating proposal document...");
+      const wordBlob = await generateProposalBlob();
+      if(wordBlob){
+        const fname = `${client}_Proposal_${dateStr}.doc`;
+        await odUploadFile(token, `${folder}/${fname}`, await wordBlob.arrayBuffer(), "application/msword");
+      }
+    }
+
+    // 3. Upload Excel estimate if estimate exists
+    if(d.estimate){
+      showOdToast("☁ Generating Excel estimate...");
+      const excelBlob = await generateExcelBlob();
+      if(excelBlob){
+        const fname = `${client}_Estimate_${dateStr}.xlsx`;
+        await odUploadFile(token, `${folder}/${fname}`, await excelBlob.arrayBuffer(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       }
     }
 
     // Store sync timestamp in appData so the UI can show it
     appData._odSyncedAt = new Date().toISOString();
     appData._odFolder   = folder;
-    showOdToast("☁ Saved to OneDrive");
+    showOdToast("☁ Saved to OneDrive: Word doc + Excel + JSON");
 
   } catch(e){
     console.error("OneDrive sync:", e);
