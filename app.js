@@ -1222,6 +1222,56 @@ function generateProposalDocument(){
   const est = d.estimate;
   if(!est){ alert("Generate estimate first"); return; }
   
+  // Helper function to format analysis text into readable sections
+  function formatAnalysis(text) {
+    if(!text) return '';
+    
+    const lines = text.split('\n').filter(line => line.trim());
+    let html = '<div class="analysis-section">';
+    
+    for(let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check if this is a heading (all caps section, or ends with :)
+      const isHeading = (line === line.toUpperCase() && line.length > 3 && line.length < 80) || 
+                       (line.endsWith(':') && line.length < 100);
+      
+      // Check if this is a bullet point
+      const isBullet = line.startsWith('-') || line.startsWith('•') || 
+                      line.match(/^[0-9]+\./);
+      
+      if(isHeading) {
+        // Close previous list if open
+        if(i > 0 && lines[i-1] && (lines[i-1].startsWith('-') || lines[i-1].startsWith('•'))) {
+          html += '</ul>';
+        }
+        html += \`<div class="analysis-heading">\${esc(line.replace(/:/g, ''))}</div>\`;
+        
+        // Check if next lines are bullets - if so, start a list
+        if(i < lines.length - 1 && (lines[i+1].startsWith('-') || lines[i+1].startsWith('•'))) {
+          html += '<ul class="analysis-list">';
+        }
+      } else if(isBullet) {
+        // If not already in a list, start one
+        if(i === 0 || (!lines[i-1].startsWith('-') && !lines[i-1].startsWith('•') && !lines[i-1].match(/^[0-9]+\./))) {
+          html += '<ul class="analysis-list">';
+        }
+        html += \`<li>\${esc(line.replace(/^[-•]\s*/, '').replace(/^[0-9]+\.\s*/, ''))}</li>\`;
+        
+        // Close list if next line is not a bullet
+        if(i === lines.length - 1 || (!lines[i+1].startsWith('-') && !lines[i+1].startsWith('•') && !lines[i+1].match(/^[0-9]+\./))) {
+          html += '</ul>';
+        }
+      } else {
+        // Regular paragraph
+        html += \`<p class="analysis-paragraph">\${esc(line)}</p>\`;
+      }
+    }
+    
+    html += '</div>';
+    return html;
+  }
+  
   const dt = new Date().toLocaleDateString();
   const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt.replace(/\//g,"-") + "_Proposal.doc";
   
@@ -1326,6 +1376,29 @@ function generateProposalDocument(){
       margin-bottom: 20px;
       white-space: pre-wrap;
     }
+    .analysis-section {
+      margin: 20px 0;
+    }
+    .analysis-heading {
+      font-weight: bold;
+      color: #B87333;
+      font-size: 13pt;
+      margin-top: 15px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .analysis-list {
+      margin: 5px 0 15px 25px;
+      line-height: 1.7;
+    }
+    .analysis-list li {
+      margin: 5px 0;
+    }
+    .analysis-paragraph {
+      margin: 10px 0 10px 15px;
+      line-height: 1.7;
+    }
     .milestone {
       margin: 10px 0 10px 20px;
       padding-left: 20px;
@@ -1383,7 +1456,17 @@ function generateProposalDocument(){
           <td style="text-align:right;">${fmt$(z.high||0)}</td>
         </tr>
       `).join('')}
-      <tr class="total-row">
+      <tr style="border-top: 2px solid #B87333;">
+        <td colspan="3"><strong>Construction Subtotal</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalHigh||0)}</strong></td>
+      </tr>
+      <tr>
+        <td colspan="3">General Conditions (${est.gcMonths||3} months)</td>
+        <td style="text-align:right;">${fmt$(est.gcLow||0)}</td>
+        <td style="text-align:right;">${fmt$(est.gcHigh||0)}</td>
+      </tr>
+      <tr class="total-row" style="border-top: 2px solid #B87333;">
         <td colspan="3"><strong>TOTAL PROJECT COST</strong></td>
         <td style="text-align:right;"><strong>${fmt$(est.totalLow||0)}</strong></td>
         <td style="text-align:right;"><strong>${fmt$(est.totalHigh||0)}</strong></td>
@@ -1399,14 +1482,14 @@ function generateProposalDocument(){
   <div class="page-break"></div>
   <h1>Site Analysis</h1>
   <p><em>Based on comprehensive photo analysis of existing conditions:</em></p>
-  <div class="section-content">${esc(est.siteAnalysis)}</div>
+  ${formatAnalysis(est.siteAnalysis)}
   ` : ''}
 
   ${est.complianceAnalysis ? `
   <div class="page-break"></div>
   <h1>Code Compliance & Permitting</h1>
   <p><em>Comprehensive review of Montana Building Code requirements and Flathead County permitting:</em></p>
-  <div class="section-content">${esc(est.complianceAnalysis)}</div>
+  ${formatAnalysis(est.complianceAnalysis)}
   ` : ''}
 
   ${est.schedule && est.schedule.milestones && est.schedule.milestones.length > 0 ? `
@@ -1444,10 +1527,20 @@ function generateProposalDocument(){
           <td style="text-align:right;">${fmt$(s.high||0)}</td>
         </tr>
       `).join('')}
-      <tr class="total-row">
-        <td><strong>General Conditions (${est.gcMonths||3} months)</strong></td>
-        <td style="text-align:right;"><strong>${fmt$(est.gcLow||0)}</strong></td>
-        <td style="text-align:right;"><strong>${fmt$(est.gcHigh||0)}</strong></td>
+      <tr style="border-top: 2px solid #B87333;">
+        <td><strong>Construction Subtotal</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalHigh||0)}</strong></td>
+      </tr>
+      <tr>
+        <td>General Conditions (${est.gcMonths||3} months)</td>
+        <td style="text-align:right;">${fmt$(est.gcLow||0)}</td>
+        <td style="text-align:right;">${fmt$(est.gcHigh||0)}</td>
+      </tr>
+      <tr class="total-row" style="border-top: 2px solid #B87333;">
+        <td><strong>TOTAL PROJECT COST</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalHigh||0)}</strong></td>
       </tr>
     </tbody>
   </table>
