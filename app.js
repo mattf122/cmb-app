@@ -47,10 +47,10 @@ let msalApp = null, odAccount = null;
     msalApp = new msal.PublicClientApplication({
       auth: {
         clientId: OD_CLIENT_ID,
-        authority: "https://login.microsoftonline.com/consumers",
+        authority: "https://login.microsoftonline.com/common",
         redirectUri: OD_REDIRECT
       },
-      cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
+      cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
     });
     // Restore previous session if user was already signed in
     const accts = msalApp.getAllAccounts();
