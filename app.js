@@ -42,12 +42,12 @@ let msalApp = null, odAccount = null;
 // Dynamically load the Microsoft Auth Library (MSAL)
 (function loadMsal(){
   const s = document.createElement("script");
-  s.src = "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js";
+  s.src = "https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js";
   s.onload = () => {
     msalApp = new msal.PublicClientApplication({
       auth: {
         clientId: OD_CLIENT_ID,
-        authority: "https://login.microsoftonline.com/common",
+        authority: "https://login.microsoftonline.com/consumers",
         redirectUri: OD_REDIRECT
       },
       cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
