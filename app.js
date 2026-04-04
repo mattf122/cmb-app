@@ -272,12 +272,25 @@ async function runGenerateEstimate(){
   // Helper: parse JSON safely
   function safeJSON(text, label){
     const s = text.indexOf("{"); const e = text.lastIndexOf("}");
-    if(s===-1||e===-1) throw new Error("No JSON in " + label + ". Got: " + text.slice(0,120));
-    try { return JSON.parse(text.slice(s,e+1)); }
+    if(s===-1||e===-1) {
+      console.error(`${label} - No JSON found. Full response:`, text);
+      throw new Error(`No JSON in ${label}. Response length: ${text.length} chars. Start: ${text.slice(0,200)}`);
+    }
+    try { 
+      return JSON.parse(text.slice(s,e+1)); 
+    }
     catch(err){
+      // Try removing trailing commas
       let t = text.slice(s,e+1).replace(/,\s*([}\]])/g,"$1");
-      try { return JSON.parse(t); }
-      catch(e2){ throw new Error(label + " parse fail: " + text.slice(0,120)); }
+      try { 
+        return JSON.parse(t); 
+      }
+      catch(e2){ 
+        // Show both start AND end to diagnose truncation
+        const extracted = text.slice(s,e+1);
+        console.error(`${label} - Parse failed. Extracted JSON:`, extracted);
+        throw new Error(`${label} parse fail. Length: ${extracted.length} chars. Start: "${extracted.slice(0,150)}" ... End: "${extracted.slice(-150)}"`);
+      }
     }
   }
 
@@ -590,11 +603,13 @@ AVOID: Generic language, jargon, overpromising, pressure tactics.
 PART 3 - COMPLIANCE NOTES (for internal/rep use only):
 Flag any code issues, permit gotchas, or risks from the analysis that the rep should know about but don't belong in client summary.
 
+CRITICAL: Return complete, valid JSON. Do not truncate. Ensure closing braces are present.
+
 Return ONLY this JSON:
 {"gcLow":0,"gcHigh":0,"gcMonths":1,"summary":"client-facing 3-4 paragraph summary here","complianceNotes":["internal note 1","note 2"]}`
     }], `${SYSTEM}
 
-When writing the summary, remember: You're a 45-year veteran having a conversation with a homeowner. Be warm, knowledgeable, and helpful. Explain WHY things cost what they cost. Build trust through specificity and honesty.`, 1500);
+When writing the summary, remember: You're a 45-year veteran having a conversation with a homeowner. Be warm, knowledgeable, and helpful. Explain WHY things cost what they cost. Build trust through specificity and honesty.`, 2500);
     const gcResult = safeJSON(gcRaw, "gc-totals");
 
     // ── CALL 6: Construction Schedule ────────────────────────────────
