@@ -288,6 +288,7 @@ async function runGenerateEstimate(){
       body: JSON.stringify({
         model: model,
         max_tokens: maxTokens,
+        temperature: 0.3,
         system: system,
         messages: messages
       })
@@ -1174,7 +1175,7 @@ async function generateProposalBlob(){
   
   const dt = new Date().toLocaleDateString();
   
-  // Create HTML document with Word-compatible formatting (same as generateProposalDocument)
+  // Create complete HTML document with ALL sections
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1197,43 +1198,110 @@ async function generateProposalBlob(){
     td { padding: 8px 10px; border: 1px solid #CCCCCC; }
     tr:nth-child(even) { background-color: #F5F0E8; }
     .total-row { background-color: #E6D5C3 !important; font-weight: bold; font-size: 13pt; }
-    .page-break { page-break-after: always; }
-    .analysis-section { margin: 15px 0; }
-    .analysis-heading { font-weight: bold; color: #B87333; margin: 15px 0 8px 0; font-size: 13pt; }
-    .analysis-list { margin-left: 20px; margin-top: 8px; margin-bottom: 12px; }
-    .analysis-paragraph { margin: 8px 0; text-align: justify; }
-    .sig-section { margin-top: 40px; page-break-inside: avoid; }
-    .sig-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; }
+    .retainer-box { background-color: #FFF8E7; border: 2px solid #B87333; padding: 15px; margin: 20px 0; font-size: 13pt; font-weight: bold; text-align: center; }
+    .page-break { page-break-before: always; }
+    .analysis-section { margin: 20px 0; }
+    .analysis-heading { font-weight: bold; color: #B87333; font-size: 13pt; margin-top: 15px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .analysis-list { margin: 5px 0 15px 25px; line-height: 1.7; }
+    .analysis-list li { margin: 5px 0; }
+    .analysis-paragraph { margin: 10px 0 10px 15px; line-height: 1.7; }
+    .milestone { margin: 10px 0 10px 20px; padding-left: 20px; border-left: 3px solid #B87333; }
+    .milestone-phase { font-weight: bold; color: #2C2A27; }
+    .milestone-duration { color: #5C5850; font-style: italic; }
+    .section-content { margin-left: 20px; margin-bottom: 20px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
 
+  <!-- COVER PAGE -->
   <div class="cover-page">
-    <div class="company-name">COPPER MOUNTAIN BUILDERS</div>
-    <div class="doc-title">CONCEPTUAL DESIGN BUILD ESTIMATE</div>
-    <div class="cover-info"><strong>Prepared For:</strong></div>
-    <div class="cover-info">${esc(d.clientName||"")}</div>
-    <div class="cover-info">${esc(d.projectAddress||"")}</div>
-    <div class="cover-info">${esc(d.projectCity||"")}, MT ${esc(d.clientZip||"")}</div>
-    <div class="cover-info" style="margin-top:40px;"><strong>Date:</strong> ${dt}</div>
-    <div class="cover-info"><strong>Prepared By:</strong> ${esc(d.repName||"")}</div>
+    <div class="company-name">${esc(d.company||"COPPER MOUNTAIN BUILDERS").toUpperCase()}</div>
+    <div class="doc-title">CONCEPTUAL DESIGN-BUILD PROPOSAL</div>
+    <div class="cover-info"><strong>Client:</strong> ${esc(d.clientName||"")}</div>
+    <div class="cover-info"><strong>Project:</strong> ${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, MT</div>
+    <div class="cover-info"><strong>Date:</strong> ${dt}</div>
+    <div class="cover-info"><strong>Prepared by:</strong> ${esc(d.repName||"")}</div>
   </div>
 
-  <h1>Project Overview</h1>
-  <p>${esc(d.projectNotes || "No project notes provided.")}</p>
+  <!-- EXECUTIVE SUMMARY -->
+  <h1>Executive Summary</h1>
+  ${est.summary ? est.summary.split('\n').map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('') : '<p>No summary available.</p>'}
+  
+  <div class="page-break"></div>
 
-  <h2>Zones</h2>
+  <!-- BUDGET SUMMARY -->
+  <h1>Budget Summary</h1>
   <table>
-    <thead><tr><th>Zone Type</th><th>Square Feet</th><th>Finish Level</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Zone</th>
+        <th>Type</th>
+        <th style="text-align:right;">Sq Ft</th>
+        <th style="text-align:right;">Budget Low</th>
+        <th style="text-align:right;">Budget High</th>
+      </tr>
+    </thead>
     <tbody>
-      ${(appData.zones||[]).map(z => `<tr><td>${esc(z.type)}</td><td>${esc(z.sqft||"")}</td><td>${esc(z.finishLevel||"")}</td></tr>`).join('')}
+      ${(est.zones||[]).map((z,i) => `
+        <tr>
+          <td>Zone ${i+1}</td>
+          <td>${esc(z.name||appData.zones[i]?.type||"")}</td>
+          <td style="text-align:right;">${appData.zones[i]?.sqft||""}</td>
+          <td style="text-align:right;">${fmt$(z.low||0)}</td>
+          <td style="text-align:right;">${fmt$(z.high||0)}</td>
+        </tr>
+      `).join('')}
+      <tr style="border-top: 2px solid #B87333;">
+        <td colspan="3"><strong>Construction Subtotal</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.subtotalHigh||0)}</strong></td>
+      </tr>
+      <tr>
+        <td colspan="3">General Conditions (${est.gcMonths||3} months)</td>
+        <td style="text-align:right;">${fmt$(est.gcLow||0)}</td>
+        <td style="text-align:right;">${fmt$(est.gcHigh||0)}</td>
+      </tr>
+      <tr class="total-row" style="border-top: 2px solid #B87333;">
+        <td colspan="3"><strong>TOTAL PROJECT COST</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalHigh||0)}</strong></td>
+      </tr>
     </tbody>
   </table>
+  
+  <div class="retainer-box">
+    Design Retainer (Non-Refundable): ${fmt$(d.retainerAmount||0)}
+  </div>
 
-  ${est.analysis ? `
+  ${est.siteAnalysis ? `
   <div class="page-break"></div>
-  <h1>Scope Analysis</h1>
-  ${formatAnalysis(est.analysis)}
+  <h1>Site Analysis</h1>
+  <p><em>Based on comprehensive photo analysis of existing conditions:</em></p>
+  ${formatAnalysis(est.siteAnalysis)}
+  ` : ''}
+
+  ${est.complianceAnalysis ? `
+  <div class="page-break"></div>
+  <h1>Code Compliance & Permitting</h1>
+  <p><em>Comprehensive review of Montana Building Code requirements and Flathead County permitting:</em></p>
+  ${formatAnalysis(est.complianceAnalysis)}
+  ` : ''}
+
+  ${est.schedule && est.schedule.milestones && est.schedule.milestones.length > 0 ? `
+  <div class="page-break"></div>
+  <h1>Construction Schedule</h1>
+  <p><strong>Total Duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
+  ${est.schedule.designPhase ? `<p><strong>Design Phase:</strong> ${esc(est.schedule.designPhase)}</p>` : ''}
+  ${est.schedule.constructionPhase ? `<p><strong>Construction Phase:</strong> ${esc(est.schedule.constructionPhase)}</p>` : ''}
+  <div class="section-content">
+    ${(est.schedule.milestones||[]).map(m => `
+      <div class="milestone">
+        <div class="milestone-phase">${esc(m.phase)}</div>
+        <div class="milestone-duration">${esc(m.duration)}</div>
+        ${m.notes ? `<div>${esc(m.notes)}</div>` : ''}
+      </div>
+    `).join('')}
+  </div>
   ` : ''}
 
   <div class="page-break"></div>
