@@ -1217,13 +1217,254 @@ www.coppermountainbuilders.com
   window.location.href = `mailto:${d.clientEmail||""}?subject=${subject}&body=${body}`;
 }
 
-function downloadVisitJSON(){
+function generateProposalDocument(){
   const d = appData;
-  const dt = new Date().toLocaleDateString().replace(/\//g,"-");
-  const filename = (d.clientName||"CMB") + "_" + dt + "_visit.json";
-  const blob = new Blob([JSON.stringify(appData, null, 2)], {type:"application/json"});
+  const est = d.estimate;
+  if(!est){ alert("Generate estimate first"); return; }
+  
+  const dt = new Date().toLocaleDateString();
+  const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt.replace(/\//g,"-") + "_Proposal.doc";
+  
+  // Create HTML document with Word-compatible formatting
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="Microsoft Word">
+  <meta name="Originator" content="Microsoft Word">
+  <style>
+    @page {
+      size: 8.5in 11in;
+      margin: 1in;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12pt;
+      line-height: 1.5;
+      color: #2C2A27;
+      margin: 0;
+      padding: 20px;
+    }
+    .cover-page {
+      text-align: center;
+      padding-top: 2in;
+      page-break-after: always;
+    }
+    .company-name {
+      font-size: 24pt;
+      font-weight: bold;
+      color: #B87333;
+      letter-spacing: 3px;
+      margin-bottom: 20px;
+    }
+    .doc-title {
+      font-size: 18pt;
+      font-weight: bold;
+      color: #2C2A27;
+      margin-bottom: 40px;
+    }
+    .cover-info {
+      font-size: 12pt;
+      margin: 10px 0;
+    }
+    h1 {
+      font-size: 18pt;
+      font-weight: bold;
+      color: #B87333;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      page-break-after: avoid;
+    }
+    h2 {
+      font-size: 14pt;
+      font-weight: bold;
+      color: #2C2A27;
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+    p {
+      margin: 10px 0;
+      text-align: justify;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      page-break-inside: avoid;
+    }
+    th {
+      background-color: #B87333;
+      color: white;
+      font-weight: bold;
+      padding: 10px;
+      border: 1px solid #999;
+      text-align: left;
+    }
+    td {
+      padding: 8px 10px;
+      border: 1px solid #CCCCCC;
+    }
+    tr:nth-child(even) {
+      background-color: #F5F0E8;
+    }
+    .total-row {
+      background-color: #F5F0E8;
+      font-weight: bold;
+    }
+    .retainer-box {
+      background-color: #FFF8E7;
+      border: 2px solid #B87333;
+      padding: 15px;
+      margin: 20px 0;
+      font-size: 13pt;
+      font-weight: bold;
+      text-align: center;
+    }
+    .section-content {
+      margin-left: 20px;
+      margin-bottom: 20px;
+      white-space: pre-wrap;
+    }
+    .milestone {
+      margin: 10px 0 10px 20px;
+      padding-left: 20px;
+      border-left: 3px solid #B87333;
+    }
+    .milestone-phase {
+      font-weight: bold;
+      color: #2C2A27;
+    }
+    .milestone-duration {
+      color: #5C5850;
+      font-style: italic;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+  <!-- COVER PAGE -->
+  <div class="cover-page">
+    <div class="company-name">${esc(d.company||"COPPER MOUNTAIN BUILDERS").toUpperCase()}</div>
+    <div class="doc-title">CONCEPTUAL DESIGN-BUILD PROPOSAL</div>
+    <div class="cover-info"><strong>Client:</strong> ${esc(d.clientName||"")}</div>
+    <div class="cover-info"><strong>Project:</strong> ${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, MT</div>
+    <div class="cover-info"><strong>Date:</strong> ${dt}</div>
+    <div class="cover-info"><strong>Prepared by:</strong> ${esc(d.repName||"")}</div>
+  </div>
+
+  <!-- EXECUTIVE SUMMARY -->
+  <h1>Executive Summary</h1>
+  ${est.summary ? est.summary.split('\n').map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('') : '<p>No summary available.</p>'}
+  
+  <div class="page-break"></div>
+
+  <!-- BUDGET SUMMARY -->
+  <h1>Budget Summary</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Zone</th>
+        <th>Type</th>
+        <th style="text-align:right;">Sq Ft</th>
+        <th style="text-align:right;">Budget Low</th>
+        <th style="text-align:right;">Budget High</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(est.zones||[]).map((z,i) => `
+        <tr>
+          <td>Zone ${i+1}</td>
+          <td>${esc(z.name||appData.zones[i]?.type||"")}</td>
+          <td style="text-align:right;">${appData.zones[i]?.sqft||""}</td>
+          <td style="text-align:right;">${fmt$(z.low||0)}</td>
+          <td style="text-align:right;">${fmt$(z.high||0)}</td>
+        </tr>
+      `).join('')}
+      <tr class="total-row">
+        <td colspan="3"><strong>TOTAL PROJECT COST</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.totalHigh||0)}</strong></td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <div class="retainer-box">
+    Design Retainer (Non-Refundable): ${fmt$(d.retainerAmount||0)}
+  </div>
+
+  ${est.siteAnalysis ? `
+  <div class="page-break"></div>
+  <h1>Site Analysis</h1>
+  <p><em>Based on comprehensive photo analysis of existing conditions:</em></p>
+  <div class="section-content">${esc(est.siteAnalysis)}</div>
+  ` : ''}
+
+  ${est.complianceAnalysis ? `
+  <div class="page-break"></div>
+  <h1>Code Compliance & Permitting</h1>
+  <p><em>Comprehensive review of Montana Building Code requirements and Flathead County permitting:</em></p>
+  <div class="section-content">${esc(est.complianceAnalysis)}</div>
+  ` : ''}
+
+  ${est.schedule && est.schedule.milestones && est.schedule.milestones.length > 0 ? `
+  <div class="page-break"></div>
+  <h1>Construction Schedule</h1>
+  <p><strong>Total Duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
+  ${est.schedule.designPhase ? `<p><strong>Design Phase:</strong> ${esc(est.schedule.designPhase)}</p>` : ''}
+  ${est.schedule.constructionPhase ? `<p><strong>Construction Phase:</strong> ${esc(est.schedule.constructionPhase)}</p>` : ''}
+  <div class="section-content">
+    ${(est.schedule.milestones||[]).map(m => `
+      <div class="milestone">
+        <div class="milestone-phase">${esc(m.phase)}</div>
+        <div class="milestone-duration">${esc(m.duration)}</div>
+        ${m.notes ? `<div>${esc(m.notes)}</div>` : ''}
+      </div>
+    `).join('')}
+  </div>
+  ` : ''}
+
+  <div class="page-break"></div>
+  <h1>Cost Breakdown by Trade</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Trade Section</th>
+        <th style="text-align:right;">Low</th>
+        <th style="text-align:right;">High</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(est.sections||[]).map(s => `
+        <tr>
+          <td>${esc(s.name)}</td>
+          <td style="text-align:right;">${fmt$(s.low||0)}</td>
+          <td style="text-align:right;">${fmt$(s.high||0)}</td>
+        </tr>
+      `).join('')}
+      <tr class="total-row">
+        <td><strong>General Conditions (${est.gcMonths||3} months)</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.gcLow||0)}</strong></td>
+        <td style="text-align:right;"><strong>${fmt$(est.gcHigh||0)}</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>`;
+
+  // Create blob and download as .doc file
+  // Word can open HTML files with .doc extension
+  const blob = new Blob([html], {type: 'application/msword'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href=url; a.download=filename; a.click();
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
@@ -1671,7 +1912,7 @@ function renderReview(){
       <div class="section-title">Export & Share</div>
       <button class="btn-secondary" onclick="emailProposal()" style="margin-bottom:8px;">📧 Email Proposal to Client</button>
       <button class="btn-secondary" onclick="exportExcel()" style="margin-bottom:8px;">📊 Download Estimate for Buildertrend (CSV/Excel)</button>
-      <button class="btn-secondary" onclick="downloadVisitJSON()" style="margin-bottom:8px;">💾 Download Full Visit Data</button>
+      <button class="btn-secondary" onclick="generateProposalDocument()" style="margin-bottom:8px;">📄 Download Proposal Document</button>
       <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
     </div>
     <button class="btn-secondary" onclick="goTo(2)">← Back</button>
