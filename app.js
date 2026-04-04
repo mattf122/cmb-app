@@ -1347,8 +1347,14 @@ async function syncVisitToOneDrive(){
   const folder = `${OD_ROOT_FOLDER}/${year}/${client} - ${addr}`;
   const dateStr = new Date().toISOString().split("T")[0];
 
+  const syncBtn = document.getElementById("od-sync-btn");
+  if(syncBtn){ syncBtn.disabled = true; syncBtn.textContent = "☁ Syncing..."; }
+
+  const uploadedFiles = [];
+
   try {
     // 1. Save visit JSON (strips large photo blobs to keep file small)
+    showOdToast("☁ Uploading visit data...");
     const snap = JSON.parse(JSON.stringify(d));
     snap.zones = (snap.zones||[]).map(z => ({
       ...z,
@@ -1357,6 +1363,7 @@ async function syncVisitToOneDrive(){
     }));
     snap._odSyncedAt = new Date().toISOString();
     await odUploadFile(token, `${folder}/visit_${dateStr}.json`, JSON.stringify(snap, null, 2), "application/json");
+    uploadedFiles.push("📋 Visit data (JSON)");
 
     // 2. Upload Word proposal document if estimate exists
     if(d.estimate){
@@ -1365,6 +1372,7 @@ async function syncVisitToOneDrive(){
       if(wordBlob){
         const fname = `${client}_Proposal_${dateStr}.doc`;
         await odUploadFile(token, `${folder}/${fname}`, await wordBlob.arrayBuffer(), "application/msword");
+        uploadedFiles.push("📄 Proposal document (Word)");
       }
     }
 
@@ -1375,18 +1383,119 @@ async function syncVisitToOneDrive(){
       if(excelBlob){
         const fname = `${client}_Estimate_${dateStr}.xlsx`;
         await odUploadFile(token, `${folder}/${fname}`, await excelBlob.arrayBuffer(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        uploadedFiles.push("📊 Estimate spreadsheet (Excel)");
       }
     }
 
     // Store sync timestamp in appData so the UI can show it
     appData._odSyncedAt = new Date().toISOString();
     appData._odFolder   = folder;
-    showOdToast("☁ Saved to OneDrive: Word doc + Excel + JSON");
+    
+    // Show success page instead of just a toast
+    if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
+    showSyncSuccessPage(uploadedFiles, folder);
 
   } catch(e){
     console.error("OneDrive sync:", e);
     showOdToast("☁ OneDrive sync failed — saved locally only", true);
+    if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
   }
+}
+
+function showSyncSuccessPage(uploadedFiles, folder){
+  const modal = document.createElement("div");
+  modal.id = "sync-success-modal";
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85); display: flex; align-items: center;
+    justify-content: center; z-index: 10000; backdrop-filter: blur(4px);
+  `;
+  
+  modal.innerHTML = `
+    <div style="
+      background: var(--cream); border-radius: 16px; padding: 40px;
+      max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    ">
+      <div style="font-size: 64px; margin-bottom: 20px;">✅</div>
+      <h2 style="color: var(--copper); margin-bottom: 10px; font-size: 28px;">Sync Complete!</h2>
+      <p style="color: var(--stone); font-size: 15px; margin-bottom: 30px;">
+        All files successfully uploaded to OneDrive
+      </p>
+      
+      <div style="
+        background: var(--stone); border-radius: 8px; padding: 20px;
+        margin-bottom: 30px; text-align: left;
+      ">
+        <div style="color: var(--stone-light); font-size: 11px; text-transform: uppercase;
+                    letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 600;">
+          📁 ${folder}
+        </div>
+        ${uploadedFiles.map(f => `
+          <div style="color: var(--cream); font-size: 14px; padding: 6px 0;
+                      border-bottom: 1px solid var(--stone-light); display: flex;
+                      align-items: center; gap: 10px;">
+            <span style="flex: 1;">${f}</span>
+            <span style="color: #7ec87e; font-size: 12px;">✓</span>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button onclick="startNewVisit()" style="
+          flex: 1; padding: 14px 24px; background: var(--copper);
+          border: none; border-radius: 8px; color: white; font-size: 15px;
+          font-weight: 600; cursor: pointer; transition: all 0.2s;
+        " onmouseover="this.style.background='#a66329'" 
+           onmouseout="this.style.background='var(--copper)'">
+          🆕 Start New Visit
+        </button>
+        
+        <button onclick="closeSyncSuccess()" style="
+          flex: 1; padding: 14px 24px; background: transparent;
+          border: 2px solid var(--stone-light); border-radius: 8px;
+          color: var(--stone); font-size: 15px; font-weight: 600;
+          cursor: pointer; transition: all 0.2s;
+        " onmouseover="this.style.borderColor='var(--stone)'" 
+           onmouseout="this.style.borderColor='var(--stone-light)'">
+          ← Back to Review
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+
+function closeSyncSuccess(){
+  const modal = document.getElementById("sync-success-modal");
+  if(modal) modal.remove();
+}
+
+function startNewVisit(){
+  if(!confirm("Start a new site visit? This will clear all current data.")){
+    return;
+  }
+  
+  closeSyncSuccess();
+  
+  // Clear all data
+  appData = {
+    company: "Copper Mountain Builders",
+    repName: "", clientName: "", clientEmail: "", clientPhone: "",
+    clientAddress: "", clientCity: "", clientZip: "",
+    projectAddress: "", projectCity: "",
+    projectNotes: "", zones: [], estimate: null,
+    retainerAmount: "", clientSig: null, repSig: null,
+    clientPrintName: "", repPrintName: "",
+    clarifyingQuestions: [], clarifyingAnswers: {}
+  };
+  
+  currentStep = 0;
+  render();
+  localStorage.removeItem("cmb_autosave");
+  
+  showOdToast("✨ New visit started!");
 }
 
 function showOdToast(msg, isError = false){
