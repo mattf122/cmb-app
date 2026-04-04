@@ -42,7 +42,7 @@ let msalApp = null, odAccount = null;
 // Dynamically load the Microsoft Auth Library (MSAL)
 (function loadMsal(){
   const s = document.createElement("script");
-  s.src = "https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js";
+  s.src = "https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js";
   s.onload = () => {
     msalApp = new msal.PublicClientApplication({
       auth: {
