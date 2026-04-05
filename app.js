@@ -2814,9 +2814,9 @@ function render(){
 // Always start fresh — auto-save is only used by the saved visits feature
 render();
 
-// Replace old logo with new CMB diamond logo
+// Replace old logo with new CMB full banner logo
 window.addEventListener('DOMContentLoaded', function() {
-  const newLogoURL = './cmb-logo.jpg'; // Logo file in same directory as app
+  const newLogoURL = './cmb-logo.jpg'; // Banner file in same directory as app
   
   // Find and replace logo images - try multiple selectors
   const selectors = [
@@ -2833,8 +2833,9 @@ window.addEventListener('DOMContentLoaded', function() {
     const logoElements = document.querySelectorAll(selector);
     logoElements.forEach(img => {
       img.src = newLogoURL;
-      img.style.maxHeight = '40px';
+      img.style.maxHeight = '50px'; // Slightly taller for banner format
       img.style.width = 'auto';
+      img.style.maxWidth = '300px'; // Limit width for mobile
       img.alt = 'Copper Mountain Builders';
     });
   }
