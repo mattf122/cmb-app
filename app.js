@@ -2833,9 +2833,9 @@ window.addEventListener('DOMContentLoaded', function() {
     const logoElements = document.querySelectorAll(selector);
     logoElements.forEach(img => {
       img.src = newLogoURL;
-      img.style.maxHeight = '50px'; // Slightly taller for banner format
+      img.style.maxHeight = '70px'; // Increased for larger, more readable text
       img.style.width = 'auto';
-      img.style.maxWidth = '300px'; // Limit width for mobile
+      img.style.maxWidth = '400px'; // Increased width limit
       img.alt = 'Copper Mountain Builders';
     });
   }
