@@ -36,7 +36,7 @@ let appData = {
 const OD_CLIENT_ID   = "3b9cde5e-f884-4491-9414-01005e038ba0"; // ← Replace this after Azure setup!
 const OD_REDIRECT    = "https://cmbsitevisit.netlify.app";
 const OD_SCOPES      = ["User.Read", "Files.ReadWrite"];
-const OD_ROOT_FOLDER = "CMB Site Visits";
+const OD_ROOT_FOLDER = "Company Files - Documents/CMB Site Visits";
 
 let msalApp = null, odAccount = null;
 
@@ -538,9 +538,17 @@ Typical sections: Demolition, Sitework, Foundation, Framing, Exterior, Roofing, 
 Match trade totals to zone totals (they must reconcile).
 Include 20% O&P in all section totals.
 
-Return ONLY: {"sections":[{"name":"trade name","low":0,"high":0}]}`
+Assign the correct CSI division number to each section using these divisions:
+00=Procurement, 01=General Requirements, 02=Existing Conditions/Demo, 03=Concrete, 04=Masonry, 05=Metals, 06=Wood/Plastics/Composites (Framing/Carpentry/Cabinets), 07=Thermal & Moisture Protection (Insulation/Roofing/Siding), 08=Openings (Doors/Windows), 09=Finishes (Drywall/Flooring/Tile/Painting), 22=Plumbing, 23=HVAC, 26=Electrical, 31=Earthwork/Sitework, 32=Exterior Improvements, 33=Utilities
+
+Return ONLY: {"sections":[{"name":"trade name","csiCode":"XX 00 00","low":0,"high":0}]}`
     }], SYSTEM, 800, "claude-haiku-4-5-20251001");
     const sectionResult = safeJSON(sectionRaw, "sections");
+    // Ensure every section has a CSI code (fill in any the AI missed)
+    sectionResult.sections = (sectionResult.sections||[]).map(s => ({
+      ...s,
+      csiCode: s.csiCode || getCsiInfo(s.name).csi
+    }));
 
     // ── CALL 5: GC + totals + sales summary ──────────────────────────
     btn.textContent = "⏳ Step 5 of 6 — Calculating GC costs + summary…";
@@ -745,7 +753,9 @@ Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleStri
 CSI: ${section.csiCode}
 
 Return ONLY this JSON array (4-6 items, real 2026 Flathead Valley CMB pricing, high-end):
-[{"description":"item name","unit":"SF","qty":1,"unitCost":0,"total":0}]`;
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+
+Break labor and material out separately. laborUnit = labor cost per unit, materialUnit = material cost per unit, unitCost = laborUnit + materialUnit. All 2026 Flathead Valley pricing including 20% O&P.`;
 
   try {
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
@@ -770,7 +780,12 @@ Return ONLY this JSON array (4-6 items, real 2026 Flathead Valley CMB pricing, h
     container.innerHTML = items.map(item=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
         <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
-        <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">${item.qty} ${esc(item.unit||"LS")} @ $${Number(item.unitCost).toLocaleString()} = <strong style="color:var(--cream);">$${Number(item.total).toLocaleString()}</strong></span>
+        <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">
+          ${item.qty} ${esc(item.unit||"LS")} &nbsp;|&nbsp;
+          ${item.laborUnit!=null?`L: $${Number(item.laborUnit).toLocaleString()}/u`:""}
+          ${item.materialUnit!=null?` M: $${Number(item.materialUnit).toLocaleString()}/u`:""}
+          &nbsp;= <strong style="color:var(--cream);">$${Number(item.total||item.totalLow||0).toLocaleString()}</strong>
+        </span>
       </div>
     `).join("");
     btn.textContent = "↻ Refresh";
@@ -973,14 +988,16 @@ Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleStri
 CSI: ${section.csiCode || getCsiInfo(section.name).csi}
 
 Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
-[{"description":"item name","unit":"SF","qty":1,"unitCostLow":0,"unitCostHigh":0,"totalLow":0,"totalHigh":0}]`;
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+
+Break labor and material out separately for job costing. 2026 Flathead Valley pricing.`;
 
         try {
           const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
             method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({
               model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include both unitCostLow/unitCostHigh and totalLow/totalHigh for each item.",
+              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include laborUnit, materialUnit, unitCost, laborTotal, materialTotal, and total for each item.",
               messages:[{role:"user", content:prompt}]
             })
           });
@@ -1022,7 +1039,7 @@ Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
     wsData.push([]);
     
     // Column headers
-    wsData.push(["Item Description", "CSI Code", "Cost Code", "Type", "Qty", "Unit", "Unit Cost Low", "Unit Cost High", "Total Low", "Total High"]);
+    wsData.push(["Item Description", "CSI Code", "Cost Code", "Unit", "Qty", "Labor $/Unit", "Material $/Unit", "Total $/Unit", "Labor Total", "Material Total", "Line Total"]);
     
     // Sections
     (est.sections||[]).forEach(section => {
@@ -1523,45 +1540,151 @@ function renderVisitsModal(){
 // ── Export functions ──────────────────────────────────────────────────
 // CSI Division mapping to Buildertrend cost code names
 const CSI_MAP = {
-  "Site Work":              { csi: "02 00 00", bt: "Sitework" },
-  "Site & Foundation":      { csi: "03 00 00", bt: "Concrete" },
+  // Division 00 — Procurement & Contracting
+  "Procurement":            { csi: "00 00 00", bt: "Procurement" },
+  "Bidding":                { csi: "00 00 00", bt: "Procurement" },
+  // Division 01 — General Requirements
+  "General Conditions":     { csi: "01 00 00", bt: "General Conditions" },
+  "Project Management":     { csi: "01 31 00", bt: "Project Management" },
+  "Site Supervision":       { csi: "01 31 13", bt: "Superintendent" },
+  "Superintendent":         { csi: "01 31 13", bt: "Superintendent" },
+  "Permits & Inspections":  { csi: "01 41 00", bt: "Permits & Fees" },
+  "Permits":                { csi: "01 41 00", bt: "Permits & Fees" },
+  "Inspections":            { csi: "01 41 00", bt: "Permits & Fees" },
+  "Temporary Facilities":   { csi: "01 50 00", bt: "Temporary Facilities" },
+  "Temporary":              { csi: "01 50 00", bt: "Temporary Facilities" },
+  "Dumpster/Debris Removal":{ csi: "01 74 19", bt: "Construction Waste Management" },
+  "Dumpster":               { csi: "01 74 19", bt: "Construction Waste Management" },
+  "Debris Removal":         { csi: "01 74 19", bt: "Construction Waste Management" },
+  "Cleanup":                { csi: "01 74 19", bt: "Construction Waste Management" },
+  "Builder Risk Insurance": { csi: "01 18 00", bt: "Insurance" },
+  "Insurance":              { csi: "01 18 00", bt: "Insurance" },
+  "Contingency (5%)":       { csi: "01 21 16", bt: "Contingency" },
+  "Contingency":            { csi: "01 21 16", bt: "Contingency" },
+  // Division 02 — Existing Conditions
+  "Demolition":             { csi: "02 41 00", bt: "Demolition" },
+  "Demo":                   { csi: "02 41 00", bt: "Demolition" },
+  "Selective Demolition":   { csi: "02 41 19", bt: "Demolition" },
+  "Existing Conditions":    { csi: "02 00 00", bt: "Existing Conditions" },
+  "Abatement":              { csi: "02 82 00", bt: "Hazardous Material Abatement" },
+  "Asbestos":               { csi: "02 82 13", bt: "Hazardous Material Abatement" },
+  // Division 03 — Concrete
   "Concrete":               { csi: "03 00 00", bt: "Concrete" },
   "Foundation":             { csi: "03 11 00", bt: "Concrete - Foundations" },
+  "Foundations":            { csi: "03 11 00", bt: "Concrete - Foundations" },
+  "Site & Foundation":      { csi: "03 00 00", bt: "Concrete" },
+  "Slab":                   { csi: "03 30 00", bt: "Concrete" },
+  "Flatwork":               { csi: "03 30 00", bt: "Concrete" },
+  "Footings":               { csi: "03 11 00", bt: "Concrete - Foundations" },
+  // Division 04 — Masonry
   "Masonry":                { csi: "04 00 00", bt: "Masonry" },
+  "Brick":                  { csi: "04 21 00", bt: "Masonry" },
+  "Stone":                  { csi: "04 43 00", bt: "Masonry" },
+  "Fireplace":              { csi: "04 57 00", bt: "Masonry" },
+  // Division 05 — Metals
+  "Metals":                 { csi: "05 00 00", bt: "Structural Steel" },
+  "Structural Steel":       { csi: "05 12 00", bt: "Structural Steel" },
+  "Steel":                  { csi: "05 12 00", bt: "Structural Steel" },
+  "Beam":                   { csi: "05 12 00", bt: "Structural Steel" },
+  "Metal Fabrications":     { csi: "05 50 00", bt: "Structural Steel" },
+  // Division 06 — Wood, Plastics & Composites
   "Framing":                { csi: "06 10 00", bt: "Rough Carpentry" },
+  "Rough Framing":          { csi: "06 10 00", bt: "Rough Carpentry" },
   "Structural Framing":     { csi: "06 10 00", bt: "Rough Carpentry" },
   "Rough Carpentry":        { csi: "06 10 00", bt: "Rough Carpentry" },
+  "Lumber":                 { csi: "06 10 00", bt: "Rough Carpentry" },
   "Finish Carpentry":       { csi: "06 20 00", bt: "Finish Carpentry" },
+  "Trim":                   { csi: "06 22 00", bt: "Finish Carpentry" },
+  "Millwork":               { csi: "06 20 00", bt: "Finish Carpentry" },
   "Cabinetry":              { csi: "06 41 00", bt: "Cabinets & Countertops" },
   "Cabinets":               { csi: "06 41 00", bt: "Cabinets & Countertops" },
+  "Kitchen Cabinets":       { csi: "06 41 00", bt: "Cabinets & Countertops" },
   "Countertops":            { csi: "06 41 16", bt: "Cabinets & Countertops" },
+  "Deck":                   { csi: "06 15 00", bt: "Decks & Porches" },
+  "Decking":                { csi: "06 15 00", bt: "Decks & Porches" },
+  "Porch":                  { csi: "06 15 00", bt: "Decks & Porches" },
+  // Division 07 — Thermal & Moisture Protection
   "Insulation":             { csi: "07 21 00", bt: "Insulation" },
+  "Spray Foam":             { csi: "07 21 29", bt: "Insulation" },
   "Roofing":                { csi: "07 30 00", bt: "Roofing" },
+  "Roof":                   { csi: "07 30 00", bt: "Roofing" },
+  "Metal Roofing":          { csi: "07 61 00", bt: "Roofing" },
+  "Standing Seam":          { csi: "07 61 13", bt: "Roofing" },
+  "Shingles":               { csi: "07 31 13", bt: "Roofing" },
   "Waterproofing":          { csi: "07 10 00", bt: "Waterproofing" },
+  "Flashing":               { csi: "07 62 00", bt: "Waterproofing" },
   "Siding":                 { csi: "07 46 00", bt: "Siding" },
+  "Exterior Cladding":      { csi: "07 46 00", bt: "Siding" },
+  "Vapor Barrier":          { csi: "07 26 00", bt: "Insulation" },
+  "Air Barrier":            { csi: "07 27 00", bt: "Insulation" },
+  // Division 08 — Openings
   "Doors & Windows":        { csi: "08 00 00", bt: "Doors & Windows" },
+  "Openings":               { csi: "08 00 00", bt: "Doors & Windows" },
   "Windows":                { csi: "08 50 00", bt: "Doors & Windows" },
   "Doors":                  { csi: "08 10 00", bt: "Doors & Windows" },
+  "Exterior Doors":         { csi: "08 14 00", bt: "Doors & Windows" },
+  "Garage Doors":           { csi: "08 36 00", bt: "Doors & Windows" },
+  "Skylights":              { csi: "08 62 00", bt: "Doors & Windows" },
+  "Hardware":               { csi: "08 71 00", bt: "Doors & Windows" },
+  // Division 09 — Finishes
   "Drywall":                { csi: "09 29 00", bt: "Drywall" },
+  "Gypsum Board":           { csi: "09 29 00", bt: "Drywall" },
+  "Plaster":                { csi: "09 20 00", bt: "Drywall" },
   "Interior Finishes":      { csi: "09 00 00", bt: "Interior Finishes" },
+  "Finishes":               { csi: "09 00 00", bt: "Interior Finishes" },
   "Tile":                   { csi: "09 30 00", bt: "Tile" },
   "Tile & Flooring":        { csi: "09 30 00", bt: "Tile" },
+  "Ceramic Tile":           { csi: "09 31 00", bt: "Tile" },
   "Flooring":               { csi: "09 60 00", bt: "Flooring" },
+  "Hardwood Flooring":      { csi: "09 64 00", bt: "Flooring" },
+  "LVP":                    { csi: "09 65 19", bt: "Flooring" },
+  "Carpet":                 { csi: "09 68 00", bt: "Flooring" },
   "Painting":               { csi: "09 90 00", bt: "Painting" },
+  "Paint":                  { csi: "09 90 00", bt: "Painting" },
+  "Staining":               { csi: "09 90 00", bt: "Painting" },
+  // Division 10 — Specialties
+  "Specialties":            { csi: "10 00 00", bt: "Specialties" },
+  "Signage":                { csi: "10 14 00", bt: "Specialties" },
+  "Toilet Accessories":     { csi: "10 28 00", bt: "Specialties" },
+  // Division 21 — Fire Suppression
+  "Fire Suppression":       { csi: "21 00 00", bt: "Fire Suppression" },
+  "Sprinklers":             { csi: "21 13 00", bt: "Fire Suppression" },
+  // Division 22 — Plumbing
   "Plumbing":               { csi: "22 00 00", bt: "Plumbing" },
+  "Plumbing Fixtures":      { csi: "22 40 00", bt: "Plumbing" },
+  "Water Heater":           { csi: "22 33 00", bt: "Plumbing" },
+  // Division 23 — HVAC
   "HVAC":                   { csi: "23 00 00", bt: "HVAC" },
   "Mechanical":             { csi: "23 00 00", bt: "HVAC" },
+  "Heating":                { csi: "23 50 00", bt: "HVAC" },
+  "Ventilation":            { csi: "23 30 00", bt: "HVAC" },
+  "Mini-Split":             { csi: "23 81 26", bt: "HVAC" },
+  "Radiant Heat":           { csi: "23 83 16", bt: "HVAC" },
+  // Division 26 — Electrical
   "Electrical":             { csi: "26 00 00", bt: "Electrical" },
-  "Deck":                   { csi: "06 15 00", bt: "Decks & Porches" },
-  "Outdoor Living":         { csi: "02 90 00", bt: "Decks & Porches" },
-  "General Conditions":     { csi: "01 00 00", bt: "General Conditions" },
-  "Dumpster/Debris Removal":{ csi: "01 74 19", bt: "Construction Waste Management" },
-  "Project Management":     { csi: "01 31 00", bt: "Project Management" },
-  "Permits & Inspections":  { csi: "01 41 00", bt: "Permits & Fees" },
-  "Temporary Facilities":   { csi: "01 50 00", bt: "Temporary Facilities" },
-  "Builder Risk Insurance": { csi: "01 18 00", bt: "Insurance" },
-  "Site Supervision":       { csi: "01 31 13", bt: "Superintendent" },
-  "Contingency (5%)":       { csi: "01 21 16", bt: "Contingency" },
+  "Lighting":               { csi: "26 50 00", bt: "Electrical" },
+  "Service Upgrade":        { csi: "26 24 00", bt: "Electrical" },
+  "Low Voltage":            { csi: "27 00 00", bt: "Communications" },
+  // Division 31 — Earthwork
+  "Earthwork":              { csi: "31 00 00", bt: "Sitework" },
+  "Excavation":             { csi: "31 23 00", bt: "Sitework" },
+  "Grading":                { csi: "31 22 00", bt: "Sitework" },
+  "Site Work":              { csi: "31 00 00", bt: "Sitework" },
+  "Sitework":               { csi: "31 00 00", bt: "Sitework" },
+  "Site Preparation":       { csi: "31 10 00", bt: "Sitework" },
+  // Division 32 — Exterior Improvements
+  "Landscaping":            { csi: "32 90 00", bt: "Landscaping" },
+  "Paving":                 { csi: "32 12 00", bt: "Paving" },
+  "Driveway":               { csi: "32 12 00", bt: "Paving" },
+  "Outdoor Living":         { csi: "32 90 00", bt: "Decks & Porches" },
+  "Fencing":                { csi: "32 31 00", bt: "Fencing" },
+  "Retaining Wall":         { csi: "32 32 00", bt: "Sitework" },
+  // Division 33 — Utilities
+  "Utilities":              { csi: "33 00 00", bt: "Utilities" },
+  "Water Service":          { csi: "33 11 00", bt: "Utilities" },
+  "Sewer":                  { csi: "33 30 00", bt: "Utilities" },
+  "Septic":                 { csi: "33 44 00", bt: "Utilities" },
+  "Well":                   { csi: "33 21 00", bt: "Utilities" },
 };
 
 function getCsiInfo(name){
@@ -1597,14 +1720,16 @@ Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleStri
 CSI: ${section.csiCode || getCsiInfo(section.name).csi}
 
 Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
-[{"description":"item name","unit":"SF","qty":1,"unitCostLow":0,"unitCostHigh":0,"totalLow":0,"totalHigh":0}]`;
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+
+Break labor and material out separately for job costing. 2026 Flathead Valley pricing.`;
 
         try {
           const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
             method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({
               model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include both unitCostLow/unitCostHigh and totalLow/totalHigh for each item.",
+              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include laborUnit, materialUnit, unitCost, laborTotal, materialTotal, and total for each item.",
               messages:[{role:"user", content:prompt}]
             })
           });
@@ -1657,7 +1782,7 @@ Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
     // ── DETAILED COST BREAKDOWN ──
     wsData.push(["DETAILED COST BREAKDOWN"]);
     wsData.push([]);
-    wsData.push(["Item Description", "CSI Code", "Cost Code", "Type", "Qty", "Unit", "Unit Low", "Unit High", "Total Low", "Total High"]);
+    wsData.push(["Item Description", "CSI Code", "Cost Code", "Unit", "Qty", "Labor $/Unit", "Material $/Unit", "Total $/Unit", "Labor Total", "Material Total", "Line Total"]);
     
     // Trade sections
     (est.sections||[]).forEach(section => {
@@ -1676,10 +1801,12 @@ Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
             "Subcontractor",
             item.qty||1,
             item.unit||"LS",
-            item.unitCostLow || item.unitCost || 0,
-            item.unitCostHigh || item.unitCost || 0,
-            item.totalLow || item.total || 0,
-            item.totalHigh || item.total || 0
+            item.laborUnit || 0,
+            item.materialUnit || 0,
+            item.unitCost || 0,
+            item.laborTotal || 0,
+            item.materialTotal || 0,
+            item.total || 0
           ]);
         });
       } else {
@@ -1691,15 +1818,17 @@ Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
           "Subcontractor",
           1,
           "LS",
+          0,
+          0,
           section.low||0,
-          section.high||0,
-          section.low||0,
-          section.high||0
+          0,
+          0,
+          section.low||0
         ]);
       }
       
       // Section total row
-      wsData.push(["", "", "", "", "", "", "", "Section Total:", section.low||0, section.high||0]);
+      wsData.push(["", "", "", "", "", "", "", "", "", "Section Total:", section.low||0]);
       wsData.push([]); // Blank row
     });
     
@@ -1744,10 +1873,12 @@ Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
       {wch: 15}, // Type
       {wch: 6},  // Qty
       {wch: 6},  // Unit
-      {wch: 12}, // Unit Low
-      {wch: 12}, // Unit High
-      {wch: 12}, // Total Low
-      {wch: 12}  // Total High
+      {wch: 12}, // Labor $/Unit
+      {wch: 12}, // Material $/Unit
+      {wch: 12}, // Total $/Unit
+      {wch: 12}, // Labor Total
+      {wch: 12}, // Material Total
+      {wch: 12}  // Line Total
     ];
     
     // Add worksheet to workbook
@@ -2438,7 +2569,12 @@ function renderEstimate(){
             ${s.lineItems&&s.lineItems.length?s.lineItems.map(item=>`
               <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
                 <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
-                <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">${item.qty} ${esc(item.unit||"LS")} @ $${Number(item.unitCost).toLocaleString()} = <strong style="color:var(--cream);">$${Number(item.total).toLocaleString()}</strong></span>
+                <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">
+          ${item.qty} ${esc(item.unit||"LS")} &nbsp;|&nbsp;
+          ${item.laborUnit!=null?`L: $${Number(item.laborUnit).toLocaleString()}/u`:""}
+          ${item.materialUnit!=null?` M: $${Number(item.materialUnit).toLocaleString()}/u`:""}
+          &nbsp;= <strong style="color:var(--cream);">$${Number(item.total||item.totalLow||0).toLocaleString()}</strong>
+        </span>
               </div>
             `).join(""):""}
           </div>
