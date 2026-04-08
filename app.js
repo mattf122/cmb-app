@@ -563,25 +563,35 @@ Include: permits, engineering, superintendent, temp facilities, dumpsters, build
 
 Calculate realistic GC costs for Flathead Valley. Don't skimp - these are real costs.
 
-PART 2 - SALES-FOCUSED SUMMARY:
-Write a compelling 3-4 paragraph summary (400-600 words) for the proposal. You are a senior estimator explaining this to the homeowner. Write like a real person who has been doing this work for decades — not like an AI, and not like a marketing brochure. Use plain, confident, specific language.
+PART 2 - SCOPE OF WORK NARRATIVE:
+Write a professional Scope of Work narrative (400-600 words) for the proposal. This is a client-facing document that the homeowner will read before signing. It will also be read by our team, so accuracy matters more than polish.
 
-GOALS:
-1. Build trust (demonstrate expertise, reference what you actually saw)
-2. Educate (explain value and Montana realities in plain terms)
-3. Position design-build (this process protects them)
-4. Create appropriate urgency (lead times, weather windows, sub availability)
-5. Make the retainer feel small relative to the total and to the risk of not doing design first
+Write it as a real contractor would write it — direct, specific, and grounded in what was actually observed and discussed. Use "we" and "our" for Copper Mountain Builders. Do not write like a marketing brochure. Do not use hollow adjectives (stunning, beautiful, exceptional, seamlessly, transformative, tailored, etc.). Do not reference years of experience or age in any form.
 
-STRUCTURE:
-Para 1: What we saw and what this project actually involves (be specific)
-Para 2: Why design-build and why Montana costs what it costs (educate, don't sell)
-Para 3: What the numbers mean and what's included
-Para 4: Next steps, timeline, and why now matters
+FORMAT — write these five sections with clear headers:
 
-TONE: Confident, direct, knowledgeable. Write like a person, not a brochure. No age references (e.g. do NOT say "in my 45 years"). Use "we" for the company voice.
+PROJECT DESCRIPTION
+Describe the project in plain terms: what type of work, where, and what we observed on site. Reference specific conditions from the notes and photos. Be concrete — if notes mention 23 windows, say 23 windows. If the existing kitchen is from the 1990s, say so. One short paragraph.
 
-AVOID: Generic filler phrases, hollow adjectives, AI-sounding language, overpromising, pressure tactics.
+SCOPE OF WORK INCLUDES
+List what is covered in this estimate. Use contractor language. Be as specific as the notes and Q&A allow. If the client mentioned specific items, list them by name. If a quantity was given, include it. Format as a bulleted or numbered list. Examples: "Demolition of existing kitchen cabinetry and fixtures", "Replacement of 23 windows (sizes, styles, and egress requirements to be finalized in design phase)", "New 200A electrical service panel and full house rewire".
+
+CLARIFICATIONS AND EXCLUSIONS
+State what is NOT included and what assumptions were made. This protects both parties and sets honest expectations. Examples: "Finish selections (flooring, tile, cabinetry, fixtures) to be finalized during design phase — unit cost allowances used for budgeting", "Permit fees estimated based on project valuation and are subject to Flathead County review", "Any concealed conditions discovered during demolition (rot, asbestos, undersized structure) will be addressed via written change order". Keep this section factual, not defensive.
+
+BUDGET AND SCHEDULE CONTEXT
+In 2-3 sentences, explain what drives the cost range and what Montana-specific factors are at play. Be honest. Reference actual lead times or seasonal constraints if they apply to this project. Do not pad this section.
+
+NEXT STEPS
+Explain the retainer, what design Steps 1-4 will deliver, and why starting now matters if there are legitimate timing constraints (sub availability, material lead times, weather windows). Keep it to 3-4 sentences. Do not manufacture urgency.
+
+TONE RULES — enforce strictly:
+- Write in complete sentences. No bullet points in the description sections.
+- Use specific numbers and facts. Avoid vague qualifiers ("significant", "major", "substantial").
+- Do not say "in our experience", "our team of experts", or any variation of expertise claims.
+- Do not say "we are excited", "we look forward", "we are committed to excellence", or similar.
+- If something is unknown, say it is unknown and will be determined in the design phase.
+- The document should read like it was written by a working contractor, not a marketing department.
 
 PART 3 - COMPLIANCE NOTES (for internal/rep use only):
 Flag any code issues, permit gotchas, or risks the rep should know.
