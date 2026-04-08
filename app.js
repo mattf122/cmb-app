@@ -914,14 +914,33 @@ async function odSignIn(){
     alert("Microsoft auth is still loading. Please wait a moment and try again.");
     return;
   }
+  // Clear any stale MSAL cache before attempting sign-in
   try {
-    const result = await msalApp.loginPopup({ scopes: OD_SCOPES });
+    const staleAccounts = msalApp.getAllAccounts();
+    for(const acct of staleAccounts){ await msalApp.clearCache({ account: acct }).catch(()=>{}); }
+  } catch(_){}
+
+  try {
+    const result = await msalApp.loginPopup({
+      scopes: OD_SCOPES,
+      prompt: "select_account"   // always show account picker, avoids stale state
+    });
     odAccount = result.account;
+    odTargetDriveId = null; // reset cached drive on new login
     updateOdBtn();
     showOdToast("☁ Connected to OneDrive as " + odAccount.username);
   } catch(e){
-    if(e.errorCode !== "user_cancelled"){
-      alert("OneDrive sign-in failed: " + (e.message || e.errorCode));
+    if(e.errorCode === "user_cancelled" || e.message?.includes("user_cancelled")) return;
+    // Show specific error to help diagnose
+    const code = e.errorCode || e.name || "unknown";
+    const msg = e.message || e.errorMessage || "No details";
+    console.error("MSAL sign-in error:", e);
+    if(code === "popup_window_error" || msg.toLowerCase().includes("popup")){
+      alert("Sign-in popup was blocked.\n\nPlease allow popups for this site in your browser, then try again.");
+    } else if(code.includes("65001") || msg.includes("consent")){
+      alert("Admin consent required.\n\nIn Azure Portal → App Registration → API permissions, click \'Grant admin consent for Copper Mountain Builders\'.");
+    } else {
+      alert("OneDrive sign-in failed (" + code + "):\n" + msg.slice(0, 200));
     }
   }
 }
