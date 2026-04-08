@@ -2157,6 +2157,14 @@ async function compressImage(dataUrl, maxWidth=800, quality=0.7){
   });
 }
 
+
+// ── Clarifying answer helper ──────────────────────────────────────────
+function setAnswer(qid, answer){
+  if(!appData.clarifyingAnswers) appData.clarifyingAnswers = {};
+  appData.clarifyingAnswers[qid] = answer;
+  render();
+}
+
 // ── Voice to text ─────────────────────────────────────────────────────
 let recognition = null;
 let activeVoiceField = null;
@@ -2331,24 +2339,28 @@ function renderScope(){
     <div class="card">
       <div class="section-title">Follow-Up Questions</div>
       <p style="font-size:12px;color:var(--stone-light);margin-bottom:14px;">Answer these before generating the estimate for best accuracy. The more you answer, the tighter the range.</p>
-      ${appData.clarifyingQuestions.map((q,qi) => `
+      ${appData.clarifyingQuestions.map((q,qi) => {
+        const ans = (appData.clarifyingAnswers||{})[q.id]||"";
+        const qid = esc(q.id);
+        return `
         <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(92,88,80,0.3);">
           <p style="font-size:13px;color:var(--cream);margin-bottom:8px;line-height:1.5;">${qi+1}. ${esc(q.question)}</p>
           ${q.type==="yesno" ? `
             <div style="display:flex;gap:8px;">
-              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="Yes"?"active":""}"
-                onclick="appData.clarifyingAnswers['${q.id}']='Yes';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="Yes"?"background:var(--copper);color:var(--charcoal);":""}">Yes</button>
-              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="No"?"active":""}"
-                onclick="appData.clarifyingAnswers['${q.id}']='No';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="No"?"background:var(--copper);color:var(--charcoal);":""}">No</button>
-              <button class="btn-small ${(appData.clarifyingAnswers||{})[q.id]==="Unknown"?"active":""}"
-                onclick="appData.clarifyingAnswers['${q.id}']='Unknown';render()" style="${(appData.clarifyingAnswers||{})[q.id]==="Unknown"?"background:var(--stone-light);":""}">Unknown</button>
+              <button class="btn-small" onclick="setAnswer('${qid}','Yes')"
+                style="${ans==="Yes"?"background:var(--copper);color:var(--stone);":""}">Yes</button>
+              <button class="btn-small" onclick="setAnswer('${qid}','No')"
+                style="${ans==="No"?"background:var(--copper);color:var(--stone);":""}">No</button>
+              <button class="btn-small" onclick="setAnswer('${qid}','Unknown')"
+                style="${ans==="Unknown"?"background:var(--stone-light);":""}">Unknown</button>
             </div>
           ` : q.type==="choice" ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${(q.options||[]).map(opt=>`
                 <button class="btn-small"
-                  onclick="appData.clarifyingAnswers['${q.id}']='${opt.replace(/'/g,"\\'")}';render()"
-                  style="${(appData.clarifyingAnswers||{})[q.id]===opt?"background:var(--copper);color:var(--charcoal);":""}">
+                  onclick="setAnswer('${qid}', this.dataset.val)"
+                  data-val="${esc(opt)}"
+                  style="${ans===opt?"background:var(--copper);color:var(--stone);":""}">
                   ${esc(opt)}
                 </button>
               `).join("")}
@@ -2356,10 +2368,10 @@ function renderScope(){
           ` : `
             <textarea style="min-height:60px;font-size:13px;"
               placeholder="Your answer…"
-              oninput="appData.clarifyingAnswers['${q.id}']=this.value">${esc((appData.clarifyingAnswers||{})[q.id]||"")}</textarea>
+              oninput="(appData.clarifyingAnswers=appData.clarifyingAnswers||{})['${qid}']=this.value">${esc(ans)}</textarea>
           `}
-        </div>
-      `).join("")}
+        </div>`;
+      }).join("")}
     </div>
     ` : ""}
     ` : ""}
