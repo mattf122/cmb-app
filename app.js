@@ -35,10 +35,11 @@ let appData = {
 // After Azure App Registration, paste your Application (client) ID below:
 const OD_CLIENT_ID   = "3b9cde5e-f884-4491-9414-01005e038ba0"; // ← Replace this after Azure setup!
 const OD_REDIRECT    = "https://cmbsitevisit.netlify.app";
-const OD_SCOPES      = ["User.Read", "Files.ReadWrite"];
-const OD_ROOT_FOLDER = "Company Files - Documents/CMB Site Visits";
+const OD_SCOPES      = ["User.Read", "Files.ReadWrite", "Files.ReadWrite.All"];
+const OD_ROOT_FOLDER = "CMB Site Visits";          // path within the SharePoint library
+const OD_LIBRARY_NAME = "Company Files - Documents"; // SharePoint library to target
 
-let msalApp = null, odAccount = null;
+let msalApp = null, odAccount = null, odTargetDriveId = null;
 
 // Dynamically load the Microsoft Auth Library (MSAL)
 (function loadMsal(){
@@ -929,6 +930,7 @@ function odSignOut(){
   if(!msalApp || !odAccount) return;
   msalApp.logoutPopup({ account: odAccount }).catch(()=>{});
   odAccount = null;
+  odTargetDriveId = null; // clear cached SharePoint drive ID
   updateOdBtn();
   showOdToast("☁ Disconnected from OneDrive", false);
 }
@@ -953,19 +955,51 @@ function odSafeName(str){
   return (str||"Unknown").replace(/[/\\:*?"<>|]/g, "").trim().substring(0, 50);
 }
 
+// Look up the SharePoint drive ID for OD_LIBRARY_NAME (cached per session)
+async function getSharePointDriveId(token){
+  if(odTargetDriveId) return odTargetDriveId;
+  try {
+    const res = await fetch("https://graph.microsoft.com/v1.0/me/drives", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if(!res.ok){ console.warn("Could not list drives:", res.status); return null; }
+    const data = await res.json();
+    const drives = data.value || [];
+    console.log("Available drives:", drives.map(d => d.name + " (" + d.id + ")"));
+    const target = drives.find(d =>
+      d.name && d.name.toLowerCase().includes(OD_LIBRARY_NAME.toLowerCase())
+    );
+    if(target){
+      odTargetDriveId = target.id;
+      console.log("SharePoint drive found:", target.name, target.id);
+      return target.id;
+    }
+    console.warn("Library not found in drives list. Falling back to me/drive.");
+  } catch(e){ console.warn("Drive lookup failed:", e); }
+  return null;
+}
+
 async function odUploadFile(token, odPath, fileContent, mimeType){
-  // Graph API path-based upload — creates intermediate folders automatically
+  // Try SharePoint drive first; fall back to personal me/drive
+  const driveId = await getSharePointDriveId(token);
   const encoded = odPath.split("/").map(encodeURIComponent).join("/");
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encoded}:/content`;
+  const url = driveId
+    ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encoded}:/content`
+    : `https://graph.microsoft.com/v1.0/me/drive/root:/${encoded}:/content`;
+  console.log("OneDrive upload →", driveId ? "SharePoint drive" : "me/drive", "→", url);
   const res = await fetch(url, {
     method: "PUT",
     headers: { "Authorization": "Bearer " + token, "Content-Type": mimeType },
     body: fileContent
   });
   if(!res.ok){
-    let msg = res.status;
-    try { const j = await res.json(); msg = j.error?.message || msg; } catch(_){}
-    throw new Error("OneDrive upload failed: " + msg);
+    let msg = res.status + " " + res.statusText;
+    try {
+      const j = await res.json();
+      msg = j.error?.message || j.error?.code || msg;
+      console.error("OneDrive upload error detail:", j);
+    } catch(_){}
+    throw new Error(`Upload failed (${res.status}): ${msg}`);
   }
   return res.json();
 }
@@ -1361,8 +1395,9 @@ async function syncVisitToOneDrive(){
     showSyncSuccessPage(uploadedFiles, folder);
 
   } catch(e){
-    console.error("OneDrive sync:", e);
-    showOdToast("☁ OneDrive sync failed — saved locally only", true);
+    console.error("OneDrive sync error:", e);
+    const errMsg = e.message || "Unknown error";
+    showOdToast("☁ Sync failed: " + errMsg.slice(0, 80), true);
     if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
   }
 }
