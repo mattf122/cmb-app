@@ -35,7 +35,7 @@ let appData = {
 // After Azure App Registration, paste your Application (client) ID below:
 const OD_CLIENT_ID   = "3b9cde5e-f884-4491-9414-01005e038ba0"; // ← Replace this after Azure setup!
 const OD_REDIRECT    = "https://cmbsitevisit.netlify.app";
-const OD_SCOPES      = ["User.Read", "Files.ReadWrite", "Files.ReadWrite.All"];
+const OD_SCOPES      = ["User.Read", "Files.ReadWrite"];
 const OD_ROOT_FOLDER = "CMB Site Visits";          // path within the SharePoint library
 const OD_LIBRARY_NAME = "Company Files - Documents"; // SharePoint library to target
 
