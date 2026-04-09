@@ -11,6 +11,13 @@ const ZONE_TYPES = [
   "Mixed Use",
   "Other"
 ];
+// CMB Labor Rates 2026
+const CMB_LABOR_RATES = {
+  carpenter:  85,   // $/hr — field labor (framing, finish, flooring, tile, etc.)
+  foreman:   100,   // $/hr — project foreman / site supervision
+  pm:        130    // $/hr — project manager
+};
+
 const FINISH_LEVELS = [
   { value: "Essential", label: "Essential", desc: "Clean, functional, quality materials" },
   { value: "Designer", label: "Designer", desc: "Elevated finishes, custom details" },
@@ -341,6 +348,20 @@ GENERAL CONDITIONS (1 month per $50k project cost, minimum 3 months):
 - Dumpsters: $500-650/pull × 5-8 pulls typical
 - Builder's risk insurance: $3,500-6,500
 - Contingency: 5% minimum (10% for remodels where we open walls)
+
+CMB LABOR RATES (use these for all labor cost calculations):
+- Carpenter / Field Labor: $85/hr
+- Project Foreman: $100/hr  
+- Project Manager: $130/hr
+
+Typical productivity (carpenter hours):
+- Rough framing: 0.06 hrs/SF | Roof framing: 0.08 hrs/SF
+- Exterior siding: 0.07 hrs/SF | Roofing: 0.05 hrs/SF
+- Insulation: 0.03 hrs/SF | Drywall hang+tape: 0.04 hrs/SF
+- Tile: 0.65 hrs/SF | Hardwood/LVP flooring: 0.05 hrs/SF
+- Painting: 0.035 hrs/SF | Trim/finish carpentry: 0.20 hrs/LF
+- Window install: 3 hrs each | Door install: 2 hrs each
+- Plumbing fixture: 4-6 hrs each | Cabinet install: 1.5 hrs/cabinet
 
 PRICING PHILOSOPHY:
 - LOW range = everything goes perfectly (it never does, but this is the "best case")
@@ -753,17 +774,17 @@ Project: ${projectSummary}
 Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
 CSI: ${section.csiCode}
 
-Return ONLY this JSON array (4-6 items, real 2026 Flathead Valley CMB pricing, high-end):
-[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+Use CMB rates: Carpenter $85/hr, Foreman $100/hr. Calculate laborUnit from hours x rate, materialUnit from material costs. Include 20% O&P in all prices.
 
-Break labor and material out separately. laborUnit = labor cost per unit, materialUnit = material cost per unit, unitCost = laborUnit + materialUnit. All 2026 Flathead Valley pricing including 20% O&P.`;
+Return ONLY this JSON array (4-6 realistic line items):
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
 
   try {
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-haiku-4-5-20251001", max_tokens:1500,
-        system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown.",
+        system:"You are a construction estimator in Flathead Valley Montana. CMB labor rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Calculate laborUnit (hrs/unit x rate), materialUnit (material only), unitCost = laborUnit+materialUnit, totals = qty x each. Return ONLY a valid JSON array [ ... ]. No markdown.",
         messages:[{role:"user", content:prompt}]
       })
     });
@@ -1040,17 +1061,17 @@ Project: ${projectSummary}
 Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
 CSI: ${section.csiCode || getCsiInfo(section.name).csi}
 
-Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
-[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+Use CMB rates: Carpenter $85/hr, Foreman $100/hr. Calculate laborUnit from hours x rate, materialUnit from material costs. Include 20% O&P.
 
-Break labor and material out separately for job costing. 2026 Flathead Valley pricing.`;
+Return ONLY this JSON array (4-8 realistic line items):
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
 
         try {
           const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
             method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({
               model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include laborUnit, materialUnit, unitCost, laborTotal, materialTotal, and total for each item.",
+              system:"You are a construction estimator in Flathead Valley Montana. CMB labor rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Use these rates to calculate laborUnit (labor cost per unit = hours per unit x rate). materialUnit = material cost per unit. unitCost = laborUnit + materialUnit. laborTotal = qty x laborUnit. materialTotal = qty x materialUnit. total = qty x unitCost. Return ONLY a valid JSON array [ ... ]. No markdown, no extra text.",
               messages:[{role:"user", content:prompt}]
             })
           });
@@ -1096,22 +1117,23 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
     
     // Sections
     (est.sections||[]).forEach(section => {
-      wsData.push([section.name, section.csiCode||"", getCsiInfo(section.name).bt, "", "", "", "", "", "", ""]);
+      wsData.push([section.name.toUpperCase(), section.csiCode||"", getCsiInfo(section.name).bt, "", "", "", "", "", "", "", ""]);
       (section.lineItems||[]).forEach(item => {
         wsData.push([
           "  " + (item.description||""),
           section.csiCode||"",
           getCsiInfo(section.name).bt,
-          item.unit||"",
-          item.qty||0,
-          item.unit||"",
-          item.unitCostLow||0,
-          item.unitCostHigh||0,
-          item.totalLow||0,
-          item.totalHigh||0
+          item.unit||"LS",
+          item.qty||1,
+          item.laborUnit||0,
+          item.materialUnit||0,
+          item.unitCost||0,
+          item.laborTotal||0,
+          item.materialTotal||0,
+          item.total||0
         ]);
       });
-      wsData.push(["", "", "", "", "", "", "", "Section Total:", section.low||0, section.high||0]);
+      wsData.push(["", "", "", "", "", "", "", "", "", "Section Total:", section.low||0]);
       wsData.push([]);
     });
     
@@ -1773,17 +1795,17 @@ Project: ${projectSummary}
 Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
 CSI: ${section.csiCode || getCsiInfo(section.name).csi}
 
-Return ONLY this JSON array (4-8 items, real 2026 Flathead Valley CMB pricing):
-[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]
+Use CMB rates: Carpenter $85/hr, Foreman $100/hr. Calculate laborUnit from hours x rate, materialUnit from material costs. Include 20% O&P.
 
-Break labor and material out separately for job costing. 2026 Flathead Valley pricing.`;
+Return ONLY this JSON array (4-8 realistic line items):
+[{"description":"item name","unit":"SF","qty":1,"laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
 
         try {
           const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
             method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({
               model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. Return ONLY a valid JSON array starting with [ and ending with ]. No markdown. Include laborUnit, materialUnit, unitCost, laborTotal, materialTotal, and total for each item.",
+              system:"You are a construction estimator in Flathead Valley Montana. CMB labor rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Use these rates to calculate laborUnit (labor cost per unit = hours per unit x rate). materialUnit = material cost per unit. unitCost = laborUnit + materialUnit. laborTotal = qty x laborUnit. materialTotal = qty x materialUnit. total = qty x unitCost. Return ONLY a valid JSON array [ ... ]. No markdown, no extra text.",
               messages:[{role:"user", content:prompt}]
             })
           });
@@ -1843,7 +1865,7 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
       const csi = getCsiInfo(section.name);
       
       // Section header row
-      wsData.push([section.name.toUpperCase(), "", "", "", "", "", "", "", "", ""]);
+      wsData.push([section.name.toUpperCase(), "", "", "", "", "", "", "", "", "", ""]);
       
       // Line items
       if(section.lineItems && section.lineItems.length){
@@ -1852,9 +1874,8 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
             "  " + (item.description||""),
             csi.csi,
             csi.bt,
-            "Subcontractor",
-            item.qty||1,
             item.unit||"LS",
+            item.qty||1,
             item.laborUnit || 0,
             item.materialUnit || 0,
             item.unitCost || 0,
@@ -1869,9 +1890,8 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
           "  " + section.name,
           csi.csi,
           csi.bt,
-          "Subcontractor",
-          1,
           "LS",
+          1,
           0,
           0,
           section.low||0,
@@ -1911,10 +1931,10 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
     
     // ── PROJECT TOTALS ──
     wsData.push(["PROJECT TOTALS"]);
-    wsData.push(["Construction Subtotal", "", "", "", "", "", "", "", est.subtotalLow||0, est.subtotalHigh||0]);
-    wsData.push(["General Conditions", "", "", "", "", "", "", "", est.gcLow||0, est.gcHigh||0]);
-    wsData.push(["", "", "", "", "", "", "", "", "", ""]);
-    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", est.totalLow||0, est.totalHigh||0]);
+    wsData.push(["Construction Subtotal", "", "", "", "", "", "", "", "", "", est.subtotalLow||0]);
+    wsData.push(["General Conditions", "", "", "", "", "", "", "", "", "", est.gcLow||0]);
+    wsData.push(["", "", "", "", "", "", "", "", "", "", ""]);
+    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", "", "", est.totalLow||0]);
     
     // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1924,9 +1944,8 @@ Break labor and material out separately for job costing. 2026 Flathead Valley pr
       {wch: 40}, // Item Description
       {wch: 10}, // CSI Code
       {wch: 25}, // Cost Code
-      {wch: 15}, // Type
+      {wch: 8},  // Unit
       {wch: 6},  // Qty
-      {wch: 6},  // Unit
       {wch: 12}, // Labor $/Unit
       {wch: 12}, // Material $/Unit
       {wch: 12}, // Total $/Unit
