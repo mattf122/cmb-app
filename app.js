@@ -961,6 +961,829 @@ function sigBlock(canvasId, sigKey, label){
 
 // ── SCREENS ──────────────────────────────────────────────────────────
 
+// ── Document handling ─────────────────────────────────────────────────
+async function handleDocuments(e, targetId, targetType){
+  const files = Array.from(e.target.files);
+  for(const file of files){
+    const dataUrl = await fileToDataURL(file);
+    const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl };
+    if(targetType==="project"){
+      if(!appData.projectDocs) appData.projectDocs=[];
+      appData.projectDocs.push(doc);
+    } else {
+      const zone=appData.zones.find(z=>z.id===targetId);
+      if(zone){ if(!zone.docs) zone.docs=[]; zone.docs.push(doc); }
+    }
+  }
+  e.target.value=""; render();
+}
+function removeDoc(targetType,targetId,docId){
+  if(targetType==="project"){ appData.projectDocs=(appData.projectDocs||[]).filter(d=>d.id!==docId); }
+  else { const zone=appData.zones.find(z=>z.id===targetId); if(zone) zone.docs=(zone.docs||[]).filter(d=>d.id!==docId); }
+  render();
+}
+function docIcon(t){ if(t.includes("pdf")) return "📄"; if(t.includes("word")||t.includes("docx")) return "📝"; if(t.includes("sheet")||t.includes("excel")) return "📊"; if(t.includes("image")) return "🖼"; return "📎"; }
+function fmtSize(b){ if(b<1024) return b+"B"; if(b<1048576) return (b/1024).toFixed(1)+"KB"; return (b/1048576).toFixed(1)+"MB"; }
+function docSection(targetType,targetId,label){
+  const docs=targetType==="project"?(appData.projectDocs||[]):(appData.zones.find(z=>z.id===targetId)?.docs||[]);
+  const inputId="docs_"+targetType+"_"+targetId;
+  return `<div class="field"><label class="field-label">${label}</label>
+    <input type="file" id="${inputId}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic" multiple style="display:none" onchange="handleDocuments(event,'${targetId}','${targetType}')"/>
+    <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);color:var(--copper);" onclick="document.getElementById('${inputId}').click()">📎 Attach Document</button>
+    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
+  </div>`;
+}
+function getAllDocs(){
+  const all=[];
+  (appData.projectDocs||[]).forEach(d=>all.push({...d,source:"Project"}));
+  appData.zones.forEach(z=>(z.docs||[]).forEach(d=>all.push({...d,source:z.type||"Project"})));
+  return all;
+}
+
+// ── Visit Storage ─────────────────────────────────────────────────────
+const AUTOSAVE_KEY = "cmb_autosave";
+const VISITS_KEY   = "cmb_saved_visits";
+
+function autoSave(){
+  try {
+    const snapshot = JSON.parse(JSON.stringify(appData));
+    snapshot.zones = (snapshot.zones||[]).map(z => ({
+      ...z,
+      photosBefore: (z.photosBefore||[]).map((_,i) => `[photo ${i+1}]`),
+      photosInspo:  (z.photosInspo||[]).map((_,i) => `[photo ${i+1}]`),
+      docs: (z.docs||[]).map(d => ({...d, dataUrl: null}))
+    }));
+    snapshot._step = currentStep;
+    snapshot._savedAt = new Date().toISOString();
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshot));
+  } catch(e){ console.warn("Auto-save failed:", e); }
+}
+
+function fullSave(){
+  try {
+    const visits = JSON.parse(localStorage.getItem(VISITS_KEY)||"[]");
+    const name = (appData.clientName||"Unnamed") + " — " + (appData.projectAddress||"No Address") + " — " + new Date().toLocaleDateString();
+    const save = { id: "v" + Date.now(), name, savedAt: new Date().toISOString(), step: currentStep, data: JSON.stringify(appData) };
+    visits.unshift(save);
+    if(visits.length > 20) visits.splice(20);
+    localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
+    alert("✓ Visit saved: " + name);
+    syncVisitToOneDrive();
+  } catch(e){ alert("Save failed: " + e.message); }
+}
+
+function loadVisit(id){
+  try {
+    const visits = JSON.parse(localStorage.getItem(VISITS_KEY)||"[]");
+    const visit = visits.find(v => v.id === id);
+    if(!visit) return alert("Visit not found");
+    if(!confirm("Load this visit? Current unsaved data will be replaced.")) return;
+    appData = JSON.parse(visit.data);
+    currentStep = visit.step || 0;
+    render();
+  } catch(e){ alert("Load failed: " + e.message); }
+}
+
+function deleteVisit(id){
+  if(!confirm("Delete this saved visit?")) return;
+  const visits = JSON.parse(localStorage.getItem(VISITS_KEY)||"[]").filter(v => v.id !== id);
+  localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
+  renderVisitsModal();
+}
+
+function getSavedVisits(){
+  return JSON.parse(localStorage.getItem(VISITS_KEY)||"[]");
+}
+
+function startNewVisit(){
+  if(!confirm("Start a new site visit? This will clear all current data.")) return;
+  closeSyncSuccess();
+  appData = {
+    company: "Copper Mountain Builders",
+    repName: "", clientName: "", clientEmail: "", clientPhone: "",
+    clientAddress: "", clientCity: "", clientZip: "",
+    projectAddress: "", projectCity: "",
+    projectNotes: "", zones: [{id:'z_default', type:'', sqft:'', notes:'', photosBefore:[], photosInspo:[]}], estimate: null,
+    retainerAmount: "", clientSig: null, repSig: null,
+    clientPrintName: "", repPrintName: "",
+    clarifyingQuestions: [], clarifyingAnswers: {}
+  };
+  currentStep = 0;
+  render();
+  localStorage.removeItem(AUTOSAVE_KEY);
+  showOdToast("✨ New visit started!");
+}
+
+// ── Visits Modal ──────────────────────────────────────────────────────
+function showVisitsModal(){
+  document.getElementById("visits-modal").style.display = "flex";
+  renderVisitsModal();
+}
+function hideVisitsModal(){
+  document.getElementById("visits-modal").style.display = "none";
+}
+function renderVisitsModal(){
+  const visits = getSavedVisits();
+  const list = document.getElementById("visits-list");
+  if(!list) return;
+  if(visits.length === 0){
+    list.innerHTML = `<p style="color:var(--stone-light);font-size:13px;text-align:center;padding:20px;">No saved visits yet.</p>`;
+    return;
+  }
+  list.innerHTML = visits.map(v => {
+    const vData = (() => { try { return JSON.parse(v.data||"{}"); } catch(_){ return {}; } })();
+    const syncedAt = vData._odSyncedAt ? "☁ Synced " + new Date(vData._odSyncedAt).toLocaleDateString() : "";
+    return `<div style="background:var(--stone);border-radius:8px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--stone-light);">
+      <div style="font-size:13px;color:var(--cream);margin-bottom:4px;">${esc(v.name)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--stone-light);">${new Date(v.savedAt).toLocaleString()}</div>
+        ${syncedAt ? `<div style="font-size:10px;color:#7ec8a4;">${syncedAt}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-small" onclick="loadVisit('${v.id}');hideVisitsModal()">Load</button>
+        ${odAccount ? `<button class="btn-small" style="background:rgba(45,106,79,0.2);border:1px solid #2d6a4f;color:#7ec8a4;" onclick="loadVisit('${v.id}');hideVisitsModal();setTimeout(syncVisitToOneDrive,300)">☁ Sync</button>` : ''}
+        <button class="btn-danger" onclick="deleteVisit('${v.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── OneDrive ──────────────────────────────────────────────────────────
+async function odSignIn(){
+  if(!msalApp){ alert("Microsoft auth is still loading. Please wait a moment and try again."); return; }
+  try {
+    const staleAccounts = msalApp.getAllAccounts();
+    for(const acct of staleAccounts){ await msalApp.clearCache({ account: acct }).catch(()=>{}); }
+  } catch(_){}
+  try {
+    const result = await msalApp.loginPopup({ scopes: OD_SCOPES, prompt: "select_account" });
+    odAccount = result.account;
+    odTargetDriveId = null;
+    updateOdBtn();
+    showOdToast("☁ Connected to OneDrive as " + odAccount.username);
+  } catch(e){
+    if(e.errorCode === "user_cancelled" || e.message?.includes("user_cancelled")) return;
+    const code = e.errorCode || e.name || "unknown";
+    const msg = e.message || e.errorMessage || "No details";
+    console.error("MSAL sign-in error:", e);
+    if(code === "popup_window_error" || msg.toLowerCase().includes("popup")){
+      alert("Sign-in popup was blocked.\n\nPlease allow popups for this site in your browser, then try again.");
+    } else if(code.includes("65001") || msg.includes("consent")){
+      alert("Admin consent required.\n\nIn Azure Portal → App Registration → API permissions, click 'Grant admin consent for Copper Mountain Builders'.");
+    } else {
+      alert("OneDrive sign-in failed (" + code + "):\n" + msg.slice(0, 200));
+    }
+  }
+}
+
+function odSignOut(){
+  if(!msalApp || !odAccount) return;
+  msalApp.logoutPopup({ account: odAccount }).catch(()=>{});
+  odAccount = null;
+  odTargetDriveId = null;
+  updateOdBtn();
+  showOdToast("☁ Disconnected from OneDrive", false);
+}
+
+async function getOdToken(){
+  if(!msalApp || !odAccount) return null;
+  try {
+    const r = await msalApp.acquireTokenSilent({ scopes: OD_SCOPES, account: odAccount });
+    return r.accessToken;
+  } catch(e){
+    try {
+      const r = await msalApp.acquireTokenPopup({ scopes: OD_SCOPES });
+      odAccount = r.account;
+      return r.accessToken;
+    } catch(e2){ return null; }
+  }
+}
+
+function odSafeName(str){
+  return (str||"Unknown").replace(/[/\\:*?"<>|]/g, "").trim().substring(0, 50);
+}
+
+async function getSharePointDriveId(token){
+  if(odTargetDriveId) return odTargetDriveId;
+  try {
+    const res = await fetch("https://graph.microsoft.com/v1.0/me/drives", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if(!res.ok){ console.warn("Could not list drives:", res.status); return null; }
+    const data = await res.json();
+    const drives = data.value || [];
+    console.log("Available drives:", drives.map(d => d.name + " (" + d.id + ")"));
+    const target = drives.find(d => d.name && d.name.toLowerCase().includes(OD_LIBRARY_NAME.toLowerCase()));
+    if(target){
+      odTargetDriveId = target.id;
+      console.log("SharePoint drive found:", target.name, target.id);
+      return target.id;
+    }
+    console.warn("Library not found. Falling back to me/drive.");
+  } catch(e){ console.warn("Drive lookup failed:", e); }
+  return null;
+}
+
+async function odUploadFile(token, odPath, fileContent, mimeType){
+  const driveId = await getSharePointDriveId(token);
+  const encoded = odPath.split("/").map(encodeURIComponent).join("/");
+  const url = driveId
+    ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encoded}:/content`
+    : `https://graph.microsoft.com/v1.0/me/drive/root:/${encoded}:/content`;
+  console.log("OneDrive upload →", driveId ? "SharePoint" : "me/drive", url);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Authorization": "Bearer " + token, "Content-Type": mimeType },
+    body: fileContent
+  });
+  if(!res.ok){
+    let msg = res.status + " " + res.statusText;
+    try { const j = await res.json(); msg = j.error?.message || j.error?.code || msg; console.error("OneDrive upload error:", j); } catch(_){}
+    throw new Error(`Upload failed (${res.status}): ${msg}`);
+  }
+  return res.json();
+}
+
+async function generateProposalBlob(){
+  const d = appData; const est = d.estimate;
+  if(!est) return null;
+  function formatAnalysis(text) {
+    if(!text) return '';
+    const lines = text.split('\n').filter(line => line.trim());
+    let html = '<div class="analysis-section">';
+    for(let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const isHeading = (line === line.toUpperCase() && line.length > 3 && line.length < 80) || (line.endsWith(':') && line.length < 100);
+      const isBullet = line.startsWith('-') || line.startsWith('•') || line.match(/^[0-9]+\./);
+      if(isHeading) {
+        if(i > 0 && lines[i-1] && (lines[i-1].startsWith('-') || lines[i-1].startsWith('•'))) html += '</ul>';
+        html += '<div class="analysis-heading">' + esc(line.replace(/:/g, '')) + '</div>';
+        if(i < lines.length - 1 && (lines[i+1].startsWith('-') || lines[i+1].startsWith('•'))) html += '<ul class="analysis-list">';
+      } else if(isBullet) {
+        if(i === 0 || (!lines[i-1].startsWith('-') && !lines[i-1].startsWith('•') && !lines[i-1].match(/^[0-9]+\./))) html += '<ul class="analysis-list">';
+        html += '<li>' + esc(line.replace(/^[-•]\s*/, '').replace(/^[0-9]+\.\s*/, '')) + '</li>';
+        if(i === lines.length - 1 || (!lines[i+1].startsWith('-') && !lines[i+1].startsWith('•') && !lines[i+1].match(/^[0-9]+\./))) html += '</ul>';
+      } else { html += '<p class="analysis-paragraph">' + esc(line) + '</p>'; }
+    }
+    html += '</div>'; return html;
+  }
+  const dt = new Date().toLocaleDateString();
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><style>
+    @page{size:8.5in 11in;margin:1in} body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;color:#2C2A27;margin:0;padding:20px}
+    .cover-page{text-align:center;padding-top:2in;page-break-after:always} .company-name{font-size:24pt;font-weight:bold;color:#B87333;letter-spacing:3px;margin-bottom:20px}
+    .doc-title{font-size:18pt;font-weight:bold;margin-bottom:40px} .cover-info{font-size:12pt;margin:10px 0}
+    h1{font-size:18pt;font-weight:bold;color:#B87333;margin-top:30px;margin-bottom:15px;page-break-after:avoid}
+    p{margin:10px 0;text-align:justify} table{width:100%;border-collapse:collapse;margin:20px 0;page-break-inside:avoid}
+    th{background-color:#B87333;color:white;font-weight:bold;padding:10px;border:1px solid #999;text-align:left}
+    td{padding:8px 10px;border:1px solid #CCCCCC} tr:nth-child(even){background-color:#F5F0E8}
+    .total-row{background-color:#E6D5C3!important;font-weight:bold;font-size:13pt}
+    .retainer-box{background-color:#FFF8E7;border:2px solid #B87333;padding:15px;margin:20px 0;font-size:13pt;font-weight:bold;text-align:center}
+    .page-break{page-break-before:always}
+    .analysis-heading{font-weight:bold;color:#B87333;font-size:13pt;margin-top:15px;margin-bottom:8px;text-transform:uppercase}
+    .analysis-list{margin:5px 0 15px 25px;line-height:1.7} .analysis-list li{margin:5px 0}
+    .analysis-paragraph{margin:10px 0 10px 15px;line-height:1.7}
+    .milestone{margin:10px 0 10px 20px;padding-left:20px;border-left:3px solid #B87333}
+  </style></head><body>
+  <div class="cover-page">
+    <div class="company-name">${esc((d.company||"COPPER MOUNTAIN BUILDERS").toUpperCase())}</div>
+    <div class="doc-title">CONCEPTUAL DESIGN-BUILD PROPOSAL</div>
+    <div class="cover-info"><strong>Client:</strong> ${esc(d.clientName||"")}</div>
+    <div class="cover-info"><strong>Project:</strong> ${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, MT</div>
+    <div class="cover-info"><strong>Date:</strong> ${dt}</div>
+    <div class="cover-info"><strong>Prepared by:</strong> ${esc(d.repName||"")}</div>
+  </div>
+  <h1>Executive Summary / Scope of Work</h1>
+  ${est.summary ? est.summary.split('\n').map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('') : '<p>No summary available.</p>'}
+  <div class="page-break"></div>
+  <h1>Budget Summary</h1>
+  <table><thead><tr><th>Project Type</th><th style="text-align:right">Sq Ft</th><th style="text-align:right">Budget Low</th><th style="text-align:right">Budget High</th></tr></thead>
+  <tbody>
+  ${(est.zones||[]).map(z => `<tr><td>${esc(z.name||appData.zones[0]?.type||"")}</td><td style="text-align:right">${appData.zones[0]?.sqft||""}</td><td style="text-align:right">${fmt$(z.low||0)}</td><td style="text-align:right">${fmt$(z.high||0)}</td></tr>`).join('')}
+  <tr style="border-top:2px solid #B87333"><td colspan="2"><strong>Construction Subtotal</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalHigh||0)}</strong></td></tr>
+  <tr><td colspan="2">General Conditions (${est.gcMonths||3} months)</td><td style="text-align:right">${fmt$(est.gcLow||0)}</td><td style="text-align:right">${fmt$(est.gcHigh||0)}</td></tr>
+  <tr class="total-row" style="border-top:2px solid #B87333"><td colspan="2"><strong>TOTAL PROJECT COST</strong></td><td style="text-align:right"><strong>${fmt$(est.totalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.totalHigh||0)}</strong></td></tr>
+  </tbody></table>
+  <div class="retainer-box">Design Retainer (Non-Refundable): ${fmt$(d.retainerAmount||0)}</div>
+  ${est.siteAnalysis?`<div class="page-break"></div><h1>Site Analysis</h1>${formatAnalysis(est.siteAnalysis)}`:''}
+  ${est.complianceAnalysis?`<div class="page-break"></div><h1>Code Compliance & Permitting</h1>${formatAnalysis(est.complianceAnalysis)}`:''}
+  ${est.schedule&&est.schedule.milestones&&est.schedule.milestones.length>0?`<div class="page-break"></div><h1>Construction Schedule</h1><p><strong>Total Duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
+  ${(est.schedule.milestones||[]).map(m=>`<div class="milestone"><strong>${esc(m.phase)}</strong> — <em>${esc(m.duration)}</em>${m.notes?`<br>${esc(m.notes)}`:''}</div>`).join('')}`:''}
+  <div class="page-break"></div>
+  <h1>Cost Breakdown by Trade</h1>
+  <table><thead><tr><th>Trade Section</th><th>BT Cost Code</th><th style="text-align:right">Low</th><th style="text-align:right">High</th></tr></thead>
+  <tbody>
+  ${(est.sections||[]).map(s=>{const bt=getBtInfo(s.name);return`<tr><td>${esc(s.name)}</td><td style="font-size:10pt;color:#666">${esc(bt.labor.replace(' Labor',''))}</td><td style="text-align:right">${fmt$(s.low||0)}</td><td style="text-align:right">${fmt$(s.high||0)}</td></tr>`;}).join('')}
+  <tr style="border-top:2px solid #B87333"><td colspan="2"><strong>Construction Subtotal</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalHigh||0)}</strong></td></tr>
+  <tr><td colspan="2">General Conditions</td><td style="text-align:right">${fmt$(est.gcLow||0)}</td><td style="text-align:right">${fmt$(est.gcHigh||0)}</td></tr>
+  <tr class="total-row" style="border-top:2px solid #B87333"><td colspan="2"><strong>TOTAL PROJECT COST</strong></td><td style="text-align:right"><strong>${fmt$(est.totalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.totalHigh||0)}</strong></td></tr>
+  </tbody></table>
+  </body></html>`;
+  return new Blob([html], {type: 'application/msword'});
+}
+
+async function generateExcelBlob(){
+  const d = appData; const est = d.estimate;
+  if(!est) return null;
+  try {
+    for(let i=0; i<(est.sections||[]).length; i++){
+      const section = est.sections[i];
+      if(!section.lineItems || section.lineItems.length === 0){
+        const z = appData.zones[0];
+        const projectSummary = `${z.type||"Project"} ${z.sqft||""}SF`;
+        const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
+Project: ${projectSummary}. Section total: $${section.low.toLocaleString()}.
+BT Cost Code: ${getBtInfo(section.name).labor}
+Use CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr.
+For each item: hours=total labor hours, laborRate=85/100/130, laborRateType=Carpenter/Foreman/PM, laborUnit=hours/qty*rate, materialUnit=material cost/unit, unitCost=laborUnit+materialUnit, laborTotal=hours*rate, materialTotal=qty*materialUnit, total=laborTotal+materialTotal. Include 20% O&P.
+Return ONLY JSON array (4-6 items):
+[{"description":"item","unit":"SF","qty":1,"hours":0,"laborRate":85,"laborRateType":"Carpenter","laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
+        try {
+          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:1500,
+              system:"You are a construction estimator in Flathead Valley Montana. CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Return ONLY valid JSON array. No markdown.",
+              messages:[{role:"user", content:prompt}] })
+          });
+          if(res.ok){
+            const data = await res.json();
+            let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+            const start = raw.indexOf("["), end = raw.lastIndexOf("]");
+            if(start!==-1 && end!==-1) est.sections[i].lineItems = JSON.parse(raw.slice(start, end+1));
+          }
+        } catch(e){ console.warn(`Line items failed for ${section.name}:`, e); }
+      }
+    }
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    const z = appData.zones[0];
+    wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
+    wsData.push([]);
+    wsData.push(["Client:", d.clientName||""]);
+    wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT`]);
+    wsData.push(["Date:", new Date().toLocaleDateString()]);
+    wsData.push(["Rep:", d.repName||""]);
+    wsData.push(["Total Budget:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
+    wsData.push([]);
+    wsData.push(["PROJECT SUMMARY"]);
+    wsData.push(["Project Type","Sq Ft","Budget Low","Budget High","Notes"]);
+    wsData.push([z.type||"", z.sqft||"", est.zones[0]?.low||0, est.zones[0]?.high||0, est.zones[0]?.notes||""]);
+    wsData.push([]); wsData.push([]);
+    wsData.push(["DETAILED COST BREAKDOWN"]); wsData.push([]);
+    wsData.push(["Item Description","BT Cost Code","Division","Unit","Qty","Hours","Labor Rate","Rate Type","Labor $/Unit","Mat $/Unit","Total $/Unit","Labor Total","Mat Total","Line Total"]);
+    (est.sections||[]).forEach(section => {
+      const bt = getBtInfo(section.name);
+      wsData.push([section.name.toUpperCase(), bt.labor.replace(" Labor",""), bt.div, "","","","","","","","","","",""]);
+      if(section.lineItems && section.lineItems.length){
+        section.lineItems.forEach(item => {
+          if((item.laborTotal||0) > 0) wsData.push(["  "+(item.description||"")+" — Labor", bt.labor, bt.div, "HR", item.hours||0, item.hours||0, item.laborRate||85, item.laborRateType||"Carpenter", item.laborUnit||0, 0, item.laborUnit||0, item.laborTotal||0, 0, item.laborTotal||0]);
+          if((item.materialTotal||0) > 0) wsData.push(["  "+(item.description||"")+" — Material", bt.material, bt.div, item.unit||"LS", item.qty||1, 0, 0, "", 0, item.materialUnit||0, item.materialUnit||0, 0, item.materialTotal||0, item.materialTotal||0]);
+        });
+      } else {
+        wsData.push(["  "+section.name, bt.labor, bt.div, "LS", 1, 0, 0, "", 0, 0, section.low||0, 0, 0, section.low||0]);
+      }
+      wsData.push(["","","","","","","","","","","","","Section Total:", section.low||0]);
+      wsData.push([]);
+    });
+    wsData.push(["GENERAL CONDITIONS ("+( est.gcMonths||3)+" months)"]);
+    wsData.push(["  General Conditions", "1.101 Project Administration and General Office Labor", "01 General Requirements", "LS", 1, 0, 0, "", 0, 0, est.gcLow||0, 0, 0, est.gcLow||0]);
+    wsData.push(["","","","","","","","","","","","","GC Total:", est.gcLow||0]);
+    wsData.push([]); wsData.push([]);
+    wsData.push(["PROJECT TOTALS"]);
+    wsData.push(["Construction Subtotal","","","","","","","","","","","","", est.subtotalLow||0]);
+    wsData.push(["General Conditions","","","","","","","","","","","","", est.gcLow||0]);
+    wsData.push(["","","","","","","","","","","","","",""]);
+    wsData.push(["TOTAL PROJECT COST","","","","","","","","","","","","", est.totalLow||0]);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{wch:42},{wch:38},{wch:32},{wch:6},{wch:6},{wch:6},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws, "Estimate");
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    return new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  } catch(e){ console.error("Excel blob failed:", e); return null; }
+}
+
+async function syncVisitToOneDrive(){
+  if(!odAccount) return;
+  const token = await getOdToken();
+  if(!token){ showOdToast("☁ OneDrive auth expired — please reconnect", true); return; }
+  const d = appData;
+  const year = new Date().getFullYear();
+  const client = odSafeName(d.clientName);
+  const addr   = odSafeName(d.projectAddress);
+  const folder = `${OD_ROOT_FOLDER}/${year}/${client} - ${addr}`;
+  const dateStr = new Date().toISOString().split("T")[0];
+  const syncBtn = document.getElementById("od-sync-btn");
+  if(syncBtn){ syncBtn.disabled = true; syncBtn.textContent = "☁ Syncing..."; }
+  const uploadedFiles = [];
+  try {
+    showOdToast("☁ Uploading visit data...");
+    const snap = JSON.parse(JSON.stringify(d));
+    snap.zones = (snap.zones||[]).map(z => ({...z, photosBefore:(z.photosBefore||[]).length?[`[${z.photosBefore.length} photo(s)]`]:[], photosInspo:(z.photosInspo||[]).length?[`[${z.photosInspo.length} photo(s)]`]:[]}));
+    snap._odSyncedAt = new Date().toISOString();
+    await odUploadFile(token, `${folder}/visit_${dateStr}.json`, JSON.stringify(snap, null, 2), "application/json");
+    uploadedFiles.push("📋 Visit data (JSON)");
+    if(d.estimate){
+      showOdToast("☁ Generating proposal document...");
+      const wordBlob = await generateProposalBlob();
+      if(wordBlob){ await odUploadFile(token, `${folder}/${client}_Proposal_${dateStr}.doc`, await wordBlob.arrayBuffer(), "application/msword"); uploadedFiles.push("📄 Proposal document (Word)"); }
+      showOdToast("☁ Generating Excel estimate...");
+      const excelBlob = await generateExcelBlob();
+      if(excelBlob){ await odUploadFile(token, `${folder}/${client}_Estimate_${dateStr}.xlsx`, await excelBlob.arrayBuffer(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); uploadedFiles.push("📊 Estimate spreadsheet (Excel)"); }
+    }
+    appData._odSyncedAt = new Date().toISOString();
+    appData._odFolder = folder;
+    if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
+    showSyncSuccessPage(uploadedFiles, folder);
+  } catch(e){
+    console.error("OneDrive sync error:", e);
+    showOdToast("☁ Sync failed: " + (e.message||"Unknown error").slice(0,80), true);
+    if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
+  }
+}
+
+function showSyncSuccessPage(uploadedFiles, folder){
+  const modal = document.createElement("div");
+  modal.id = "sync-success-modal";
+  modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);";
+  modal.innerHTML = `<div style="background:var(--cream);border-radius:16px;padding:40px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">
+    <div style="font-size:64px;margin-bottom:20px;">✅</div>
+    <h2 style="color:var(--copper);margin-bottom:10px;font-size:28px;">Sync Complete!</h2>
+    <p style="color:var(--stone);font-size:15px;margin-bottom:30px;">All files uploaded to OneDrive</p>
+    <div style="background:var(--stone);border-radius:8px;padding:20px;margin-bottom:30px;text-align:left;">
+      <div style="color:var(--stone-light);font-size:11px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600;">📁 ${folder}</div>
+      ${uploadedFiles.map(f=>`<div style="color:var(--cream);font-size:14px;padding:6px 0;border-bottom:1px solid var(--stone-light);display:flex;align-items:center;gap:10px;"><span style="flex:1;">${f}</span><span style="color:#7ec87e;font-size:12px;">✓</span></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button onclick="startNewVisit()" style="flex:1;padding:14px 24px;background:var(--copper);border:none;border-radius:8px;color:white;font-size:15px;font-weight:600;cursor:pointer;">🆕 Start New Visit</button>
+      <button onclick="closeSyncSuccess()" style="flex:1;padding:14px 24px;background:transparent;border:2px solid var(--stone-light);border-radius:8px;color:var(--stone);font-size:15px;font-weight:600;cursor:pointer;">← Back to Review</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function closeSyncSuccess(){
+  const modal = document.getElementById("sync-success-modal");
+  if(modal) modal.remove();
+}
+
+function showOdToast(msg, isError = false){
+  let t = document.getElementById("od-toast");
+  if(!t){
+    t = document.createElement("div");
+    t.id = "od-toast";
+    t.style.cssText = "position:fixed;bottom:24px;right:20px;padding:11px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;transition:opacity 0.6s";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = isError ? "#8b2020" : "#1e4d38";
+  t.style.color = "white";
+  t.style.opacity = "1";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = "0"; }, 3800);
+}
+
+function updateOdBtn(){
+  const btn = document.getElementById("od-connect-btn");
+  if(!btn) return;
+  if(odAccount){
+    const user = odAccount.name || odAccount.username || "OneDrive";
+    btn.textContent = "☁ " + user.split(" ")[0] + " ✓";
+    btn.title = "Connected as " + odAccount.username + " — click to disconnect";
+    btn.onclick = () => { if(confirm("Disconnect from OneDrive?")) odSignOut(); };
+  } else {
+    btn.textContent = "☁ Connect OneDrive";
+    btn.onclick = odSignIn;
+  }
+}
+
+// ── AI Analysis ───────────────────────────────────────────────────────
+async function runAnalyzeScope(){
+  const btn = document.getElementById("analyze-btn");
+  const err = document.getElementById("analyze-error");
+  const status = document.getElementById("analyze-status");
+  btn.disabled = true; btn.textContent = "⏳ Analyzing…";
+  err.classList.add("hidden");
+  try {
+    const z = appData.zones[0];
+    const projectSummary = `Project Type: ${z.type||"Not specified"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"no notes"}`;
+    const visionContent = [];
+    for(const photo of (z.photosBefore||[]).slice(0,4)){
+      const c = await compressImage(photo, 600, 0.6);
+      visionContent.push({type:"text", text:"[Current site condition photo]:"});
+      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    }
+    for(const photo of (z.photosInspo||[]).slice(0,2)){
+      const c = await compressImage(photo, 600, 0.6);
+      visionContent.push({type:"text", text:"[Client inspiration photo]:"});
+      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    }
+    const allDocs = getAllDocs();
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)){
+      const c = await compressImage(doc.dataUrl, 600, 0.6);
+      visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
+      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    }
+    const analysisPrompt = `You are a senior estimator at Copper Mountain Builders reviewing a site visit. Based on what you can see and read, ask up to 10 targeted follow-up questions to fill in gaps preventing an accurate estimate.
+
+PROJECT OVERVIEW:
+${projectSummary}
+OVERALL PROJECT NOTES: ${appData.projectNotes||"none provided"}
+SITE ADDRESS: ${appData.projectAddress||"unknown"}, ${appData.projectCity||"Montana"}
+${visionContent.length > 0 ? "PHOTOS: Attached above." : "No photos provided."}
+
+Focus on:
+- Specific quantities mentioned but not detailed (e.g. "23 windows" — what sizes? egress?)
+- Finish/product selections not yet made (flooring type, cabinet line, tile, countertop)
+- Structural unknowns (foundation type, load-bearing walls, roof pitch)
+- Site/mechanical conditions (utilities, existing systems to replace)
+- Timeline and occupancy constraints
+- Montana-specific concerns (WUI zone, septic/well, snow load)
+
+Only ask what you cannot determine from the notes/photos. Prioritize questions where the answer changes the estimate by $10,000+.
+
+Return ONLY this JSON:
+{"questions":[{"id":"q1","question":"Your question?","type":"text","options":[]},{"id":"q2","question":"Yes/no?","type":"yesno","options":[]},{"id":"q3","question":"Multiple choice?","type":"choice","options":["A","B","C"]}]}`;
+
+    visionContent.push({type:"text", text:analysisPrompt});
+    if(status) status.textContent = "Analyzing photos and scope…";
+    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1500,
+        messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}] })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    if(!data.content?.[0]?.text) throw new Error("No response from analysis");
+    const raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
+    if(start===-1) throw new Error("Could not parse questions");
+    const result = JSON.parse(raw.slice(start,end+1));
+    appData.clarifyingQuestions = result.questions||[];
+    appData.clarifyingAnswers = {};
+    if(status) status.textContent = "";
+    btn.textContent = "↻ Re-analyze"; btn.disabled = false;
+    render();
+  } catch(e){
+    err.textContent = "Error: " + e.message; err.classList.remove("hidden");
+    btn.disabled = false; btn.textContent = "⚡ Analyze & Ask";
+    if(status) status.textContent = "";
+  }
+}
+
+async function runGenerateEstimate(){
+  const btn = document.getElementById("gen-est-btn");
+  const err = document.getElementById("est-error");
+  btn.disabled = true; err.classList.add("hidden");
+  const z = appData.zones[0];
+  const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"standard scope"}`;
+
+  async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
+    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model, max_tokens:maxTokens, temperature:0.3, system, messages })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error("Claude error: " + JSON.stringify(data.error));
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    if(!data.content?.[0]?.text) throw new Error("No content in response");
+    return data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+  }
+
+  function safeJSON(text, label){
+    const s = text.indexOf("{"); const e = text.lastIndexOf("}");
+    if(s===-1||e===-1) throw new Error(`No JSON in ${label}`);
+    try { return JSON.parse(text.slice(s,e+1)); }
+    catch(err){
+      let t = text.slice(s,e+1).replace(/,\s*([}\]])/g,"$1");
+      try { return JSON.parse(t); }
+      catch(e2){ throw new Error(`${label} parse fail: "${text.slice(s,s+150)}"...`); }
+    }
+  }
+
+  const SYSTEM = `You are the Chief Estimator at Copper Mountain Builders with extensive experience building residential and commercial projects in Northwest Montana. You know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction in Flathead Valley.
+
+CMB LABOR RATES (use for all labor calculations):
+- Carpenter / Field Labor: $85/hr
+- Project Foreman: $100/hr
+- Project Manager: $130/hr
+
+Typical productivity (carpenter hours): Rough framing 0.06 hrs/SF | Roof framing 0.08 hrs/SF | Siding 0.07 hrs/SF | Roofing 0.05 hrs/SF | Insulation 0.03 hrs/SF | Drywall 0.04 hrs/SF | Tile 0.65 hrs/SF | Hardwood/LVP 0.05 hrs/SF | Painting 0.035 hrs/SF | Trim 0.20 hrs/LF | Window install 3 hrs each | Door install 2 hrs each | Plumbing fixture 4-6 hrs each | Cabinet install 1.5 hrs/cabinet
+
+MONTANA REALITIES:
+- 48-inch frost depth | 70 psf ground snow load | 180-day construction season
+- Standing seam standard (8-12 week lead time) | Windows 8-12 weeks | Permit review 4-6 weeks
+- Sub availability: framers 8-12 weeks out | WUI requirements add 10-15% to exterior
+
+2026 FLATHEAD VALLEY UNIT COSTS:
+Foundation: slab $9-12/SF, stem wall $38-48/SF | Framing: $5.50-7.50/SF walls
+Roofing: standing seam $24-30/SF | Exterior: LP SmartSide $12-16/SF, windows $900-1800 EA
+Insulation: spray foam $3-4/SF | Plumbing: full bath $14k-26k | Electrical: $14k-28k
+HVAC: $11k-21k | Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF
+Cabinetry kitchen: $24k-46k | Countertops: quartz $65-95/SF | Drywall: $2.80-3.60/SF
+
+HARD PER-SF LIMITS (all-in including GC + 20% O&P):
+New construction: $200-320/SF | Remodel: $120-280/SF | ADU: $220-360/SF | Deck: $80-180/SF
+
+RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
+
+  try {
+    btn.textContent = "⏳ Step 1 of 6 — Analyzing photos…";
+    let siteNotes = "";
+    const allDocs = getAllDocs();
+    const photosToAnalyze = [];
+    for(const photo of (z.photosBefore||[]).slice(0,4)) photosToAnalyze.push({photo, label:"current site condition"});
+    for(const photo of (z.photosInspo||[]).slice(0,2)) photosToAnalyze.push({photo, label:"client inspiration"});
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name});
+
+    if(photosToAnalyze.length > 0){
+      const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos with the eye of an experienced Montana builder.
+PROJECT: ${projectSummary} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
+NOTES: ${appData.projectNotes||"none"}
+
+For each photo identify: existing conditions/materials/age, code compliance red flags (Flathead County), hidden costs you see coming, scope implications, Montana-specific observations (snow load, frost heave, ice dam evidence), what's salvageable vs must-replace. Be specific, reference code sections if applicable. 600-1000 words.`}];
+      for(const {photo, label} of photosToAnalyze.slice(0,8)){
+        const compressed = await compressImage(photo, 800, 0.7);
+        visionContent.push({type:"text", text:`[${label}]:`});
+        visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
+      }
+      const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:2000, messages:[{role:"user",content:visionContent}]})
+      });
+      if(visionRes.ok){ const vd = await visionRes.json(); if(vd.content?.[0]?.text) siteNotes = vd.content[0].text; }
+    }
+
+    const qaContext = (appData.clarifyingQuestions||[]).map(q => {
+      const ans = (appData.clarifyingAnswers||{})[q.id];
+      return ans ? `Q: ${q.question}\nA: ${ans}` : null;
+    }).filter(Boolean).join("\n");
+
+    btn.textContent = "⏳ Step 2 of 6 — Reviewing code compliance…";
+    let complianceResult = null;
+    try {
+      complianceResult = await workerCall([{role:"user", content:
+        `Review this project for Montana building code compliance and Flathead County permitting requirements.
+PROJECT: ${appData.projectAddress}, ${appData.projectCity||"Flathead County"}, Montana
+PROJECT TYPE: ${z.type||"Not specified"} | NOTES: ${z.notes||"none"} | OVERALL: ${appData.projectNotes||"none"}
+${siteNotes?"SITE PHOTOS ANALYSIS:\n"+siteNotes:""}
+${qaContext?"CLIENT Q&A:\n"+qaContext:""}
+
+Cover: 1) Permits required (building, electrical, plumbing, mechanical, special) with estimated fees and timeline
+2) Code compliance items (IRC/IBC 2021 + Flathead County: snow load 70psf, energy code, egress, accessibility)
+3) Scope triggers (what forces upgrades of existing systems)
+4) Timeline risks (permit delays, engineering, seasonal restrictions)
+5) Cost impacts with dollar estimates
+
+Write as a professional narrative report with ALL CAPS section headings. Plain paragraphs, 500-800 words. Do NOT return JSON. Write like a contractor writing a compliance memo — specific, direct, actionable.`
+      }], `You are the Chief Estimator at Copper Mountain Builders with deep experience in Montana building code and Flathead County permitting. Write clear professional narrative reports with ALL CAPS section headings. Never return JSON. Write like an experienced contractor.`, 1500);
+    } catch(e){ console.warn("Compliance failed:", e.message); complianceResult = "Code compliance review unavailable. Recommend manual review."; }
+
+    btn.textContent = "⏳ Step 3 of 6 — Pricing project…";
+    const zoneRaw = await workerCall([{role:"user", content:
+      `Price this Montana project with Flathead Valley expertise.
+PROJECT: ${projectSummary}
+${siteNotes?"Site Analysis:\n"+siteNotes+"\n":""}
+${complianceResult?"Code Notes:\n"+complianceResult+"\n":""}
+${appData.projectNotes?"Overall Notes: "+appData.projectNotes+"\n":""}
+${z.notes?"Project Notes: "+z.notes+"\n":""}
+${qaContext?"Q&A:\n"+qaContext+"\n":""}
+LOW range = best case. HIGH range = reality. Include 20% O&P. Montana costs 15-25% more than Boise/Missoula.
+Return ONLY: {"zones":[{"name":"${z.type||"Project"}","low":0,"high":0,"notes":"2-3 sentence scope note"}]}`
+    }], SYSTEM, 1200);
+    const zoneResult = safeJSON(zoneRaw, "zones");
+
+    btn.textContent = "⏳ Step 4 of 6 — Breaking out trades…";
+    const sectionRaw = await workerCall([{role:"user", content:
+      `Break this Montana project into trade sections.
+PROJECT: ${projectSummary}
+ZONE TOTALS: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} LOW to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))} HIGH
+${siteNotes?"Site observations: "+siteNotes.slice(0,400):""}
+MAX 7 trade sections. Match totals to zone totals. Include 20% O&P.
+Assign the correct Buildertrend CSI division: 00=Procurement, 01=General Requirements, 02=Existing Conditions/Demo, 03=Concrete, 04=Masonry, 05=Metals, 06=Wood/Carpentry/Cabinets, 07=Thermal/Moisture/Roofing/Siding/Insulation, 08=Openings/Doors/Windows, 09=Finishes/Drywall/Flooring/Tile/Painting, 22=Plumbing, 23=HVAC, 26=Electrical, 31=Earthwork, 32=Exterior, 33=Utilities
+Return ONLY: {"sections":[{"name":"trade name","csiCode":"X.X01","low":0,"high":0}]}`
+    }], SYSTEM, 800, "claude-haiku-4-5-20251001");
+    const sectionResult = safeJSON(sectionRaw, "sections");
+    sectionResult.sections = (sectionResult.sections||[]).map(s => ({...s, csiCode: s.csiCode || getBtInfo(s.name).labor}));
+
+    btn.textContent = "⏳ Step 5 of 6 — Writing scope + GC costs…";
+    const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+(z.low||0), 0);
+    const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+(z.high||0), 0);
+    const gcRaw = await workerCall([{role:"user", content:
+      `Calculate general conditions AND write the Scope of Work narrative for this Montana design-build proposal.
+BASE CONSTRUCTION: ${fmt$(subtotalLow)} LOW / ${fmt$(subtotalHigh)} HIGH
+PROJECT: ${projectSummary}
+${siteNotes?"Site Analysis: "+siteNotes.slice(0,300):""}
+${complianceResult?"Code Notes: "+complianceResult.slice(0,300):""}
+${qaContext?"Q&A:\n"+qaContext:""}
+
+PART 1 — GENERAL CONDITIONS:
+Duration: 1 month per $50k (minimum 3 months). Include permits, engineering, superintendent, temp facilities, dumpsters, builder's risk, 5% contingency. Realistic Flathead Valley costs.
+
+PART 2 — SCOPE OF WORK NARRATIVE (400-600 words):
+Write as a working contractor would. Use "we" for CMB. Five sections with ALL CAPS headers:
+PROJECT DESCRIPTION — what type of work, what we observed, specific conditions from notes/photos
+SCOPE OF WORK INCLUDES — specific line items, quantities from notes, contractor language
+CLARIFICATIONS AND EXCLUSIONS — what's not included, assumptions made, finish selections TBD
+BUDGET AND SCHEDULE CONTEXT — what drives the cost range, Montana-specific factors, lead times
+NEXT STEPS — retainer, design phase deliverables, timing constraints
+TONE: Direct, specific, grounded. No hollow adjectives (stunning/transformative/seamlessly). No expertise claims. No age references. Write like a person, not a brochure.
+
+PART 3 — COMPLIANCE NOTES (internal rep use only): Flag code issues or permit risks.
+
+Return ONLY this JSON:
+{"gcLow":0,"gcHigh":0,"gcMonths":3,"summary":"scope of work narrative here","complianceNotes":["note1","note2"]}`
+    }], SYSTEM, 2500);
+    const gcResult = safeJSON(gcRaw, "gc-totals");
+
+    btn.textContent = "⏳ Step 6 of 6 — Building schedule…";
+    let scheduleResult = null;
+    try {
+      const schedRaw = await workerCall([{role:"user", content:
+        `Build a realistic construction schedule for this Montana design-build project.
+PROJECT: ${projectSummary}
+Total budget: ${fmt$(subtotalLow + (gcResult.gcLow||0))} – ${fmt$(subtotalHigh + (gcResult.gcHigh||0))}
+Construction duration: ${gcResult.gcMonths||3} months
+${qaContext?"Q&A:\n"+qaContext:""}
+${siteNotes?"Site observations: "+siteNotes.slice(0,300):""}
+
+Include DESIGN PHASE (Steps 1-4, 10-14 weeks total) and CONSTRUCTION PHASE with:
+- Seasonal constraints (foundation May-Oct, dried-in before Sept 15)
+- Material lead times (windows 8-12wk, standing seam 10-14wk, cabinets 6-10wk)
+- Sub booking deadlines (framers 8-12wk, finish carpenters 6-8wk)
+- Sequencing dependencies and inspection hold points
+- Client decision deadlines and weather window constraints
+
+Return ONLY: {"designPhase":"10-14 weeks","constructionPhase":"X-Y months","startToFinish":"total duration","milestones":[{"phase":"Week 1-2: Initial Consultation","duration":"2 weeks","notes":"2 client meetings","type":"design"}]}`
+      }], SYSTEM, 2000);
+      scheduleResult = safeJSON(schedRaw, "schedule");
+    } catch(e){ console.warn("Schedule failed:", e.message); scheduleResult = {startToFinish:`${gcResult.gcMonths||3} months construction + 10-14 weeks design`, milestones:[]}; }
+
+    const totalLow  = subtotalLow  + (gcResult.gcLow||0);
+    const totalHigh = subtotalHigh + (gcResult.gcHigh||0);
+    const estimate = {
+      zones: zoneResult.zones, sections: sectionResult.sections,
+      gcLow: gcResult.gcLow||0, gcHigh: gcResult.gcHigh||0, gcMonths: gcResult.gcMonths||3,
+      subtotalLow, subtotalHigh, overheadProfitLow: 0, overheadProfitHigh: 0,
+      totalLow, totalHigh,
+      summary: gcResult.summary||"", complianceNotes: gcResult.complianceNotes||[],
+      complianceAnalysis: complianceResult||"", siteAnalysis: siteNotes||"",
+      schedule: scheduleResult
+    };
+    appData.estimate = estimate;
+    const suggested = calcRetainerSuggestion(estimate.totalLow);
+    if(!appData.retainerAmount) appData.retainerAmount = suggested;
+    render();
+  } catch(e){
+    err.textContent = "Error: " + e.message; err.classList.remove("hidden");
+    btn.disabled = false; btn.textContent = "✦ Generate AI Estimate";
+  }
+}
+
+async function expandSection(sectionIdx){
+  const btn = document.getElementById("expand-btn-"+sectionIdx);
+  const container = document.getElementById("expand-"+sectionIdx);
+  if(!btn || !container) return;
+  btn.disabled = true; btn.textContent = "⏳ Loading…";
+  const section = appData.estimate.sections[sectionIdx];
+  const z = appData.zones[0];
+  const bt = getBtInfo(section.name);
+  const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
+Project: ${z.type||"Project"} ${z.sqft||""}SF. Section total: $${section.low.toLocaleString()}.
+BT Cost Code: ${bt.labor}
+Use CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr.
+For each item: hours=total labor hours for that qty, laborRate=85/100/130, laborRateType=Carpenter/Foreman/PM, laborUnit=hours/qty*rate, materialUnit=material cost/unit, unitCost=laborUnit+materialUnit, laborTotal=hours*rate, materialTotal=qty*materialUnit, total=laborTotal+materialTotal. Include 20% O&P.
+Return ONLY JSON array (4-6 items):
+[{"description":"item","unit":"SF","qty":1,"hours":0,"laborRate":85,"laborRateType":"Carpenter","laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
+  try {
+    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:1500,
+        system:"You are a construction estimator in Flathead Valley Montana. CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Return ONLY valid JSON array. No markdown.",
+        messages:[{role:"user", content:prompt}] })
+    });
+    if(!res.ok) throw new Error("Server error "+res.status);
+    const data = await res.json();
+    let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    const start = raw.indexOf("["), end = raw.lastIndexOf("]");
+    if(start===-1||end===-1) throw new Error("No array returned");
+    const items = JSON.parse(raw.slice(start, end+1));
+    appData.estimate.sections[sectionIdx].lineItems = items;
+    container.innerHTML = items.map(item=>`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
+        <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
+        <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;text-align:right;">
+          ${item.qty} ${esc(item.unit||"LS")} | ${item.hours||0}hrs @ $${item.laborRate||85}/hr (${esc(item.laborRateType||"Carpenter")})<br>
+          Mat: $${Number(item.materialUnit||0).toLocaleString()}/${esc(item.unit||"LS")} = <strong style="color:var(--cream);">$${Number(item.total||0).toLocaleString()}</strong>
+        </span>
+      </div>`).join("");
+    btn.textContent = "↻ Refresh"; btn.disabled = false;
+  } catch(e){
+    container.innerHTML = `<p style="color:var(--danger);font-size:12px;">Error: ${e.message}</p>`;
+    btn.textContent = "↻ Retry"; btn.disabled = false;
+  }
+}
+
+
+
 function renderClient(){
   const d = appData;
   return `<div class="page">
