@@ -504,8 +504,8 @@ As a Montana code expert who's navigated hundreds of Flathead County permits:
    - Seasonal restrictions (septic install, well drilling)
 
 Return detailed compliance analysis with specific code sections, permit names, cost estimates, and timeline impacts.
-Format as narrative analysis, 500-800 words.`
-      }], SYSTEM, 1500);
+Format as a professional narrative report, 500-800 words. Write in plain paragraphs with clear section headings using ALL CAPS (e.g. PERMITS REQUIRED, CODE COMPLIANCE ITEMS). Do NOT return JSON or any structured data format. Write as a contractor would write a compliance memo.`
+      }], `You are the Chief Estimator at Copper Mountain Builders with deep experience in Montana building code and Flathead County permitting. Write clear, professional narrative reports for clients and field teams. Use plain paragraphs and ALL CAPS section headings. Never return JSON. Write like an experienced contractor writing a compliance memo — specific, direct, and actionable.`, 1500);
       
       complianceResult = complianceRaw;
     } catch(e){ 
