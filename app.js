@@ -11,6 +11,106 @@ const ZONE_TYPES = [
   "Mixed Use",
   "Other"
 ];
+const FINISH_LEVELS = [
+  { value: "Essential", label: "Essential", desc: "Clean, functional, quality materials" },
+  { value: "Designer", label: "Designer", desc: "Elevated finishes, custom details" },
+  { value: "Luxury", label: "Luxury", desc: "Top of market, bespoke everything" }
+];
+
+// CMB Labor Rates 2026
+const CMB_LABOR_RATES = {
+  carpenter:  85,
+  foreman:   100,
+  pm:        130
+};
+
+let currentStep = 0;
+let appData = {
+  company: "Copper Mountain Builders",
+  repName: "", clientName: "", clientEmail: "", clientPhone: "",
+  clientAddress: "", clientCity: "", clientZip: "",
+  projectAddress: "", projectCity: "",
+  projectNotes: "", zones: [{id:'z_default', type:'', sqft:'', notes:'', photosBefore:[], photosInspo:[]}], estimate: null,
+  retainerAmount: "", clientSig: null, repSig: null,
+  clientPrintName: "", repPrintName: "",
+  clarifyingQuestions: [], clarifyingAnswers: {}
+};
+
+// ── OneDrive Config ─────────────────────────────────────────────────────
+const OD_CLIENT_ID   = "3b9cde5e-f884-4491-9414-01005e038ba0";
+const OD_REDIRECT    = "https://cmbsitevisit.netlify.app";
+const OD_SCOPES      = ["User.Read", "Files.ReadWrite"];
+const OD_ROOT_FOLDER = "CMB Site Visits";          // path within the SharePoint library
+const OD_LIBRARY_NAME = "Company Files - Documents"; // SharePoint library to target
+
+let msalApp = null, odAccount = null, odTargetDriveId = null;
+
+// Dynamically load the Microsoft Auth Library (MSAL)
+(function loadMsal(){
+  const s = document.createElement("script");
+  s.src = "https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js";
+  s.onload = () => {
+    msalApp = new msal.PublicClientApplication({
+      auth: {
+        clientId: OD_CLIENT_ID,
+        authority: "https://login.microsoftonline.com/common",
+        redirectUri: OD_REDIRECT
+      },
+      cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
+    });
+    const accts = msalApp.getAllAccounts();
+    if(accts.length > 0){ odAccount = accts[0]; updateOdBtn(); }
+  };
+  s.onerror = () => console.warn("MSAL load failed — OneDrive sync unavailable");
+  document.head.appendChild(s);
+})();
+
+// ── Settings ────────────────────────────────────────────────────────
+function showSettings(){
+  const m = document.getElementById("settings-modal");
+  m.style.display = "flex";
+}
+function hideSettings(){
+  document.getElementById("settings-modal").style.display = "none";
+}
+function saveSettings(){
+  const val = document.getElementById("api-key-input").value.trim();
+  if(!val){ alert("Please enter your API key"); return; }
+  hideSettings();
+  render();
+  alert("✓ API key saved!");
+}
+
+// ── Navigation ──────────────────────────────────────────────────────
+function goTo(step){ currentStep = step; render(); autoSave(); }
+function updateHeader(){
+  document.getElementById("step-badge").textContent = STEPS[currentStep];
+  const pct = (currentStep / (STEPS.length-1)) * 100;
+  document.getElementById("progress-fill").style.width = pct + "%";
+  document.getElementById("step-dots").innerHTML = STEPS.map((s,i) => {
+    const w = i === currentStep ? 24 : 8;
+    const bg = i <= currentStep ? "var(--copper)" : "var(--stone-light)";
+    return `<div class="dot" style="width:${w}px;background:${bg}"></div>`;
+  }).join("");
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+function fmt$(n){ return "$" + Number(n||0).toLocaleString(); }
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function today(){ return new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}); }
+function fileToDataURL(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(file); }); }
+
+function calcRetainerSuggestion(total){
+  if(!total) return 8000;
+  if(total < 50000) return 8000;
+  if(total < 100000) return 10000;
+  if(total < 150000) return 12000;
+  if(total < 200000) return 15000;
+  if(total < 300000) return 20000;
+  if(total < 500000) return 25000;
+  return 35000;
+}
+
 // Buildertrend CSI Cost Code Map
 // Each entry: { labor: "X.X01 Name Labor", material: "X.X02 Name Material", div: "XX Division Name" }
 const BT_MAP = {
