@@ -17,6 +17,18 @@ const FINISH_LEVELS = [
   { value: "Luxury", label: "Luxury", desc: "Top of market, bespoke everything" }
 ];
 
+// Required trades by project type — used for post-AI validation
+const REQUIRED_TRADES_BY_TYPE = {
+  "Residential Remodel":                    ["Demolition","Framing","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring","Trim"],
+  "Commercial Remodel / Tenant Improvement":["Demolition","Framing","Drywall","Painting","Electrical","Plumbing","HVAC","Flooring","Fire Suppression"],
+  "New Residential Construction":           ["Excavation","Foundation","Framing","Roofing","Siding","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring","Cabinetry","Trim"],
+  "New Commercial Construction":            ["Excavation","Foundation","Framing","Roofing","Exterior Cladding","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring","Fire Suppression"],
+  "Addition":                               ["Foundation","Framing","Roofing","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring"],
+  "ADU / Guest House":                      ["Excavation","Foundation","Framing","Roofing","Siding","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring","Cabinetry"],
+  "Site Work / Land Development":           ["Excavation","Grading","Utilities"],
+  "Mixed Use":                              ["Foundation","Framing","Roofing","Exterior Cladding","Insulation","Drywall","Painting","Electrical","Plumbing","HVAC","Doors & Windows","Flooring","Fire Suppression","Cabinetry"]
+};
+
 // CMB Labor Rates 2026
 const CMB_LABOR_RATES = {
   carpenter:  85,
@@ -33,7 +45,10 @@ let appData = {
   projectNotes: "", zones: [{id:'z_default', type:'', sqft:'', notes:'', photosBefore:[], photosInspo:[]}], estimate: null,
   retainerAmount: "", clientSig: null, repSig: null,
   clientPrintName: "", repPrintName: "",
-  clarifyingQuestions: [], clarifyingAnswers: {}
+  clarifyingQuestions: [], clarifyingAnswers: {},
+  finishLevel: "Designer",
+  davisBacon: false,
+  marginPercent: 20
 };
 
 // ── OneDrive Config ─────────────────────────────────────────────────────
@@ -334,10 +349,16 @@ Return ONLY this JSON array (4-8 realistic line items):
     // ── PROJECT INFORMATION HEADER ──
     wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
     wsData.push([]);
+    if(appData.davisBacon){
+      wsData.push(["*** DAVIS-BACON PREVAILING WAGE PROJECT ***"]);
+      wsData.push(["Wage rates per DOL Flathead County, MT determination"]);
+      wsData.push([]);
+    }
     wsData.push(["Client:", d.clientName||""]);
     wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT ${d.clientZip||""}`]);
     wsData.push(["Date:", new Date().toLocaleDateString()]);
     wsData.push(["Rep:", d.repName||""]);
+    wsData.push(["Finish Level:", appData.finishLevel||"Designer"]);
     wsData.push(["Total Budget Range:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
     wsData.push([]);
     
@@ -419,12 +440,21 @@ Return ONLY this JSON array (4-8 realistic line items):
     wsData.push([]);
     
     // ── PROJECT TOTALS ──
+    const marginPct = appData.marginPercent || 20;
+    const bareSubtotal = est.subtotalLow||0;
+    const gcTotal = est.gcLow||0;
+    const bareCost = bareSubtotal + gcTotal;
+    const marginAmt = Math.round(bareCost * (marginPct / 100));
     wsData.push(["PROJECT TOTALS"]);
-    wsData.push(["Construction Subtotal", "", "", "", "", "", "", "", "", "", "", "", "", est.subtotalLow||0]);
-    wsData.push(["General Conditions", "", "", "", "", "", "", "", "", "", "", "", "", est.gcLow||0]);
+    wsData.push(["Construction Subtotal (Labor + Material)", "", "", "", "", "", "", "", "", "", "", "", "", bareSubtotal]);
+    wsData.push(["General Conditions", "", "", "", "", "", "", "", "", "", "", "", "", gcTotal]);
+    wsData.push(["SUBTOTAL (Bare Cost)", "", "", "", "", "", "", "", "", "", "", "", "", bareCost]);
+    wsData.push([`Builder's Margin (${marginPct}%)`, "", "", "", "", "", "", "", "", "", "", "", "", marginAmt]);
     wsData.push(["", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
-    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", "", "", "", "", "", est.totalLow||0]);
-    
+    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", "", "", "", "", "", bareCost + marginAmt]);
+    wsData.push([]);
+    wsData.push(["NOTE: 20% O&P is included in all unit rates above. Builder's Margin shown is the same 20% for reference/adjustment."]);
+
     // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
@@ -835,6 +865,44 @@ function generateProposalDocument(){
   URL.revokeObjectURL(url);
 }
 
+// ── PDF.js setup ──────────────────────────────────────────────────────
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function renderPdfToImages(dataUrl, maxPages=15){
+  if(!window.pdfjsLib) throw new Error("PDF.js not loaded");
+  const raw = atob(dataUrl.split(",")[1]);
+  const arr = new Uint8Array(raw.length);
+  for(let i=0; i<raw.length; i++) arr[i] = raw.charCodeAt(i);
+  const pdf = await pdfjsLib.getDocument({data: arr}).promise;
+  const pages = [];
+  const numPages = Math.min(pdf.numPages, maxPages);
+  for(let p=1; p<=numPages; p++){
+    const page = await pdf.getPage(p);
+    const scale = 1200 / page.getViewport({scale:1}).width; // ~1200px wide
+    const viewport = page.getViewport({scale});
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({canvasContext: canvas.getContext("2d"), viewport}).promise;
+    pages.push(canvas.toDataURL("image/jpeg", 0.8));
+  }
+  return pages;
+}
+
+function getAllPdfPageImages(maxTotal=15){
+  const pages = [];
+  const allDocs = getAllDocs();
+  for(const doc of allDocs){
+    if(doc.pdfPages && doc.pdfPages.length){
+      for(const pg of doc.pdfPages){
+        pages.push({image: pg, source: doc.name});
+        if(pages.length >= maxTotal) return pages;
+      }
+    }
+  }
+  return pages;
+}
+
 // ── Image compression ─────────────────────────────────────────────────
 async function compressImage(dataUrl, maxWidth=800, quality=0.7){
   return new Promise(resolve => {
@@ -967,6 +1035,12 @@ async function handleDocuments(e, targetId, targetType){
   for(const file of files){
     const dataUrl = await fileToDataURL(file);
     const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl };
+    if(file.type === 'application/pdf'){
+      try {
+        doc.pdfPages = await renderPdfToImages(dataUrl, 15);
+        console.log(`PDF "${file.name}": rendered ${doc.pdfPages.length} pages`);
+      } catch(err){ console.warn("PDF render failed:", err); doc.pdfPages = []; }
+    }
     if(targetType==="project"){
       if(!appData.projectDocs) appData.projectDocs=[];
       appData.projectDocs.push(doc);
@@ -990,7 +1064,7 @@ function docSection(targetType,targetId,label){
   return `<div class="field"><label class="field-label">${label}</label>
     <input type="file" id="${inputId}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic" multiple style="display:none" onchange="handleDocuments(event,'${targetId}','${targetType}')"/>
     <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);color:var(--copper);" onclick="document.getElementById('${inputId}').click()">📎 Attach Document</button>
-    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
+    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}${doc.pdfPages&&doc.pdfPages.length?`<span class="pdf-badge">${doc.pdfPages.length} pages</span>`:""}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
   </div>`;
 }
 function getAllDocs(){
@@ -1011,8 +1085,9 @@ function autoSave(){
       ...z,
       photosBefore: (z.photosBefore||[]).map((_,i) => `[photo ${i+1}]`),
       photosInspo:  (z.photosInspo||[]).map((_,i) => `[photo ${i+1}]`),
-      docs: (z.docs||[]).map(d => ({...d, dataUrl: null}))
+      docs: (z.docs||[]).map(d => ({...d, dataUrl: null, pdfPages: null}))
     }));
+    if(snapshot.projectDocs) snapshot.projectDocs = snapshot.projectDocs.map(d => ({...d, dataUrl: null, pdfPages: null}));
     snapshot._step = currentStep;
     snapshot._savedAt = new Date().toISOString();
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshot));
@@ -1066,7 +1141,10 @@ function startNewVisit(){
     projectNotes: "", zones: [{id:'z_default', type:'', sqft:'', notes:'', photosBefore:[], photosInspo:[]}], estimate: null,
     retainerAmount: "", clientSig: null, repSig: null,
     clientPrintName: "", repPrintName: "",
-    clarifyingQuestions: [], clarifyingAnswers: {}
+    clarifyingQuestions: [], clarifyingAnswers: {},
+    finishLevel: "Designer",
+    davisBacon: false,
+    marginPercent: 20
   };
   currentStep = 0;
   render();
@@ -1318,10 +1396,16 @@ Return ONLY JSON array (4-6 items):
     const z = appData.zones[0];
     wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
     wsData.push([]);
+    if(appData.davisBacon){
+      wsData.push(["*** DAVIS-BACON PREVAILING WAGE PROJECT ***"]);
+      wsData.push(["Wage rates per DOL Flathead County, MT determination"]);
+      wsData.push([]);
+    }
     wsData.push(["Client:", d.clientName||""]);
     wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT`]);
     wsData.push(["Date:", new Date().toLocaleDateString()]);
     wsData.push(["Rep:", d.repName||""]);
+    wsData.push(["Finish Level:", appData.finishLevel||"Designer"]);
     wsData.push(["Total Budget:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
     wsData.push([]);
     wsData.push(["PROJECT SUMMARY"]);
@@ -1348,11 +1432,20 @@ Return ONLY JSON array (4-6 items):
     wsData.push(["  General Conditions", "1.101 Project Administration and General Office Labor", "01 General Requirements", "LS", 1, 0, 0, "", 0, 0, est.gcLow||0, 0, 0, est.gcLow||0]);
     wsData.push(["","","","","","","","","","","","","GC Total:", est.gcLow||0]);
     wsData.push([]); wsData.push([]);
+    const marginPct2 = appData.marginPercent || 20;
+    const bareSubtotal2 = est.subtotalLow||0;
+    const gcTotal2 = est.gcLow||0;
+    const bareCost2 = bareSubtotal2 + gcTotal2;
+    const marginAmt2 = Math.round(bareCost2 * (marginPct2 / 100));
     wsData.push(["PROJECT TOTALS"]);
-    wsData.push(["Construction Subtotal","","","","","","","","","","","","", est.subtotalLow||0]);
-    wsData.push(["General Conditions","","","","","","","","","","","","", est.gcLow||0]);
+    wsData.push(["Construction Subtotal (Labor + Material)","","","","","","","","","","","","", bareSubtotal2]);
+    wsData.push(["General Conditions","","","","","","","","","","","","", gcTotal2]);
+    wsData.push(["SUBTOTAL (Bare Cost)","","","","","","","","","","","","", bareCost2]);
+    wsData.push([`Builder's Margin (${marginPct2}%)`,"","","","","","","","","","","","", marginAmt2]);
     wsData.push(["","","","","","","","","","","","","",""]);
-    wsData.push(["TOTAL PROJECT COST","","","","","","","","","","","","", est.totalLow||0]);
+    wsData.push(["TOTAL PROJECT COST","","","","","","","","","","","","", bareCost2 + marginAmt2]);
+    wsData.push([]);
+    wsData.push(["NOTE: 20% O&P is included in all unit rates above. Builder's Margin shown is the same 20% for reference/adjustment."]);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     ws['!cols'] = [{wch:42},{wch:38},{wch:32},{wch:6},{wch:6},{wch:6},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
     XLSX.utils.book_append_sheet(wb, ws, "Estimate");
@@ -1456,49 +1549,71 @@ function updateOdBtn(){
 }
 
 // ── AI Analysis ───────────────────────────────────────────────────────
+async function acquireWakeLock(){
+  try { if('wakeLock' in navigator) return await navigator.wakeLock.request('screen'); } catch(e){ console.warn("Wake Lock unavailable:", e); }
+  return null;
+}
+function releaseWakeLock(lock){ if(lock) lock.release().catch(()=>{}); }
+
 async function runAnalyzeScope(){
   const btn = document.getElementById("analyze-btn");
   const err = document.getElementById("analyze-error");
   const status = document.getElementById("analyze-status");
   btn.disabled = true; btn.textContent = "⏳ Analyzing…";
   err.classList.add("hidden");
+  const wakeLock = await acquireWakeLock();
   try {
     const z = appData.zones[0];
     const projectSummary = `Project Type: ${z.type||"Not specified"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"no notes"}`;
     const visionContent = [];
-    for(const photo of (z.photosBefore||[]).slice(0,4)){
-      const c = await compressImage(photo, 600, 0.6);
+    for(const photo of (z.photosBefore||[]).slice(0,6)){
+      const c = await compressImage(photo, 800, 0.7);
       visionContent.push({type:"text", text:"[Current site condition photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
-    for(const photo of (z.photosInspo||[]).slice(0,2)){
-      const c = await compressImage(photo, 600, 0.6);
+    for(const photo of (z.photosInspo||[]).slice(0,3)){
+      const c = await compressImage(photo, 800, 0.7);
       visionContent.push({type:"text", text:"[Client inspiration photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const allDocs = getAllDocs();
-    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)){
-      const c = await compressImage(doc.dataUrl, 600, 0.6);
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,3)){
+      const c = await compressImage(doc.dataUrl, 800, 0.7);
       visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
+      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    }
+    const pdfPages = getAllPdfPageImages(10);
+    for(const pg of pdfPages){
+      if(status) status.textContent = `Reading blueprint page from ${pg.source}…`;
+      const c = await compressImage(pg.image, 1200, 0.8);
+      visionContent.push({type:"text", text:`[Blueprint/plan page from ${pg.source}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const analysisPrompt = `You are a senior estimator at Copper Mountain Builders reviewing a site visit. Based on what you can see and read, ask up to 10 targeted follow-up questions to fill in gaps preventing an accurate estimate.
 
 PROJECT OVERVIEW:
 ${projectSummary}
+FINISH LEVEL: ${appData.finishLevel||"Designer"}
 OVERALL PROJECT NOTES: ${appData.projectNotes||"none provided"}
 SITE ADDRESS: ${appData.projectAddress||"unknown"}, ${appData.projectCity||"Montana"}
-${visionContent.length > 0 ? "PHOTOS: Attached above." : "No photos provided."}
+${visionContent.length > 0 ? "PHOTOS AND DOCUMENTS: Attached above." : "No photos provided."}
 
-Focus on:
+IMPORTANT: Read ALL notes carefully — they contain specific directions and scope items for the estimate. Every item, material, quantity, or consideration mentioned must be accounted for.
+
+For any blueprint/plan pages: extract ALL dimensions, room labels, square footages, window/door schedules, finish schedules, structural notes, and specifications. Note every detail that affects pricing.
+
+For site photos: count every visible window and door (note sizes if possible), identify ALL finish materials (flooring, countertops, cabinets, tile, wall finishes), note specific quantities, estimate dimensions where possible.
+
+Focus questions on:
 - Specific quantities mentioned but not detailed (e.g. "23 windows" — what sizes? egress?)
 - Finish/product selections not yet made (flooring type, cabinet line, tile, countertop)
 - Structural unknowns (foundation type, load-bearing walls, roof pitch)
 - Site/mechanical conditions (utilities, existing systems to replace)
 - Timeline and occupancy constraints
 - Montana-specific concerns (WUI zone, septic/well, snow load)
+${appData.davisBacon ? "- Davis-Bacon prevailing wage classifications needed for each trade" : ""}
 
-Only ask what you cannot determine from the notes/photos. Prioritize questions where the answer changes the estimate by $10,000+.
+Only ask what you cannot determine from the notes/photos/plans. Prioritize questions where the answer changes the estimate by $10,000+.
 
 Return ONLY this JSON:
 {"questions":[{"id":"q1","question":"Your question?","type":"text","options":[]},{"id":"q2","question":"Yes/no?","type":"yesno","options":[]},{"id":"q3","question":"Multiple choice?","type":"choice","options":["A","B","C"]}]}`;
@@ -1521,8 +1636,10 @@ Return ONLY this JSON:
     appData.clarifyingAnswers = {};
     if(status) status.textContent = "";
     btn.textContent = "↻ Re-analyze"; btn.disabled = false;
+    releaseWakeLock(wakeLock);
     render();
   } catch(e){
+    releaseWakeLock(wakeLock);
     err.textContent = "Error: " + e.message; err.classList.remove("hidden");
     btn.disabled = false; btn.textContent = "⚡ Analyze & Ask";
     if(status) status.textContent = "";
@@ -1533,8 +1650,9 @@ async function runGenerateEstimate(){
   const btn = document.getElementById("gen-est-btn");
   const err = document.getElementById("est-error");
   btn.disabled = true; err.classList.add("hidden");
+  const wakeLock = await acquireWakeLock();
   const z = appData.zones[0];
-  const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"standard scope"}`;
+  const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Finish: ${appData.finishLevel||"Designer"} | Notes: ${z.notes||"standard scope"}`;
 
   async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
@@ -1559,12 +1677,47 @@ async function runGenerateEstimate(){
     }
   }
 
-  const SYSTEM = `You are the Chief Estimator at Copper Mountain Builders with extensive experience building residential and commercial projects in Northwest Montana. You know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction in Flathead Valley.
+  const isCommercial = (z.type||"").toLowerCase().includes("commercial");
+  const isDavisBacon = appData.davisBacon;
+  const finishLevel = appData.finishLevel || "Designer";
+
+  function buildSystemPrompt(){
+    let sys = `You are the Chief Estimator at Copper Mountain Builders with extensive experience building residential and commercial projects in Northwest Montana. You know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction in Flathead Valley.`;
+
+    if(isDavisBacon){
+      sys += `
+
+DAVIS-BACON PREVAILING WAGES APPLY TO THIS PROJECT.
+Use Department of Labor prevailing wage rates for Flathead County, MT instead of CMB rates.
+Common Montana prevailing wages (verify against current DOL determination):
+- Carpenter: $32-38/hr base + $18-22/hr fringe = $50-60/hr total
+- Electrician: $38-45/hr base + $20-25/hr fringe = $58-70/hr total
+- Plumber/Pipefitter: $36-42/hr base + $19-24/hr fringe = $55-66/hr total
+- Laborer: $22-28/hr base + $14-18/hr fringe = $36-46/hr total
+- Operating Engineer: $34-40/hr base + $18-22/hr fringe = $52-62/hr total
+- Ironworker: $36-42/hr base + $20-24/hr fringe = $56-66/hr total
+- Sheet Metal Worker: $35-41/hr base + $19-23/hr fringe = $54-64/hr total
+Include certified payroll administration costs (add 3-5% to total labor).
+Include performance and payment bonds (2-3% of total contract value).`;
+    } else {
+      sys += `
 
 CMB LABOR RATES (use for all labor calculations):
 - Carpenter / Field Labor: $85/hr
 - Project Foreman: $100/hr
-- Project Manager: $130/hr
+- Project Manager: $130/hr`;
+    }
+
+    if(isCommercial || isDavisBacon){
+      sys += `
+
+COMMERCIAL/GOVERNMENT PROJECT REQUIREMENTS:
+- Include performance and payment bond costs (2-3% of contract value) in General Conditions
+- Include certified payroll administration costs if Davis-Bacon applies
+- Consider prevailing wage requirements for all subcontractor labor`;
+    }
+
+    sys += `
 
 Typical productivity (carpenter hours): Rough framing 0.06 hrs/SF | Roof framing 0.08 hrs/SF | Siding 0.07 hrs/SF | Roofing 0.05 hrs/SF | Insulation 0.03 hrs/SF | Drywall 0.04 hrs/SF | Tile 0.65 hrs/SF | Hardwood/LVP 0.05 hrs/SF | Painting 0.035 hrs/SF | Trim 0.20 hrs/LF | Window install 3 hrs each | Door install 2 hrs each | Plumbing fixture 4-6 hrs each | Cabinet install 1.5 hrs/cabinet
 
@@ -1580,34 +1733,64 @@ Insulation: spray foam $3-4/SF | Plumbing: full bath $14k-26k | Electrical: $14k
 HVAC: $11k-21k | Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF
 Cabinetry kitchen: $24k-46k | Countertops: quartz $65-95/SF | Drywall: $2.80-3.60/SF
 
+FINISH LEVEL: ${finishLevel}
+- Essential = clean, functional, mid-grade materials (use low end of unit cost ranges)
+- Designer = elevated finishes, custom details, mid-to-high materials (use mid-to-high ranges)
+- Luxury = top of market, bespoke everything (use high end + 15-25% premium)
+Adjust ALL unit costs and material selections to match the ${finishLevel} finish level.
+
 HARD PER-SF LIMITS (all-in including GC + 20% O&P):
 New construction: $200-320/SF | Remodel: $120-280/SF | ADU: $220-360/SF | Deck: $80-180/SF
 
 RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
+    return sys;
+  }
+  const SYSTEM = buildSystemPrompt();
 
   try {
-    btn.textContent = "⏳ Step 1 of 6 — Analyzing photos…";
+    btn.textContent = "⏳ Step 1 of 6 — Analyzing photos & blueprints…";
     let siteNotes = "";
     const allDocs = getAllDocs();
     const photosToAnalyze = [];
-    for(const photo of (z.photosBefore||[]).slice(0,4)) photosToAnalyze.push({photo, label:"current site condition"});
-    for(const photo of (z.photosInspo||[]).slice(0,2)) photosToAnalyze.push({photo, label:"client inspiration"});
-    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,2)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name});
+    for(const photo of (z.photosBefore||[]).slice(0,10)) photosToAnalyze.push({photo, label:"current site condition", isDoc:false});
+    for(const photo of (z.photosInspo||[]).slice(0,4)) photosToAnalyze.push({photo, label:"client inspiration", isDoc:false});
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,4)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name, isDoc:true});
+    const pdfPages = getAllPdfPageImages(15);
+    for(const pg of pdfPages) photosToAnalyze.push({photo:pg.image, label:`Blueprint page from ${pg.source}`, isDoc:true});
 
     if(photosToAnalyze.length > 0){
-      const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos with the eye of an experienced Montana builder.
-PROJECT: ${projectSummary} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
+      const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos and documents with the eye of an experienced Montana builder.
+PROJECT: ${projectSummary} | FINISH LEVEL: ${appData.finishLevel||"Designer"} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
 NOTES: ${appData.projectNotes||"none"}
+PROJECT NOTES: ${z.notes||"none"}
+${appData.davisBacon ? "THIS IS A DAVIS-BACON PREVAILING WAGE PROJECT." : ""}
 
-For each photo identify: existing conditions/materials/age, code compliance red flags (Flathead County), hidden costs you see coming, scope implications, Montana-specific observations (snow load, frost heave, ice dam evidence), what's salvageable vs must-replace. Be specific, reference code sections if applicable. 600-1000 words.`}];
-      for(const {photo, label} of photosToAnalyze.slice(0,8)){
-        const compressed = await compressImage(photo, 800, 0.7);
+For each SITE PHOTO:
+- Count every visible window and door (note sizes if discernible)
+- Identify ALL finish materials: flooring type, countertop material, cabinet style, tile patterns, wall finishes
+- Note specific quantities of everything countable
+- Estimate dimensions where possible (room sizes, wall lengths, ceiling heights)
+- Identify every trade that will be needed based on what you see
+- Note existing conditions: age, wear, code compliance issues, structural concerns
+
+For each BLUEPRINT/PLAN PAGE:
+- Extract ALL dimensions, room labels, square footages
+- Note window/door schedules, finish schedules, structural specifications
+- Identify mechanical/electrical/plumbing layouts
+- Note any specifications or product callouts
+- Extract every detail that affects pricing
+
+Be specific and quantitative. Reference code sections where applicable. 800-1500 words.`}];
+      for(const {photo, label, isDoc} of photosToAnalyze.slice(0,18)){
+        btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
+        const maxPx = isDoc ? 1200 : 800;
+        const compressed = await compressImage(photo, maxPx, 0.7);
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
       const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:2000, messages:[{role:"user",content:visionContent}]})
+        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:3000, messages:[{role:"user",content:visionContent}]})
       });
       if(visionRes.ok){ const vd = await visionRes.json(); if(vd.content?.[0]?.text) siteNotes = vd.content[0].text; }
     }
@@ -1653,16 +1836,42 @@ Return ONLY: {"zones":[{"name":"${z.type||"Project"}","low":0,"high":0,"notes":"
 
     btn.textContent = "⏳ Step 4 of 6 — Breaking out trades…";
     const sectionRaw = await workerCall([{role:"user", content:
-      `Break this Montana project into trade sections.
+      `Break this Montana project into ALL applicable trade sections. Do NOT combine or omit trades — every distinct trade that applies MUST have its own section.
+
 PROJECT: ${projectSummary}
 ZONE TOTALS: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} LOW to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))} HIGH
-${siteNotes?"Site observations: "+siteNotes.slice(0,400):""}
-MAX 7 trade sections. Match totals to zone totals. Include 20% O&P.
+${siteNotes?"Site observations:\n"+siteNotes:""}
+${appData.projectNotes?"Overall project notes: "+appData.projectNotes:""}
+${z.notes?"Detailed project notes: "+z.notes:""}
+${qaContext?"Q&A:\n"+qaContext:""}
+
+CRITICAL: Read through ALL notes and Q&A answers above. Every item, material, quantity, or consideration mentioned MUST appear in a trade section. If notes mention windows — include a Windows section. If notes mention tile — include a Tile section. If notes mention drywall or paint — include those sections. Miss NOTHING from the notes.
+
+Match section totals to zone totals. Include 20% O&P.
 Assign the correct Buildertrend CSI division: 00=Procurement, 01=General Requirements, 02=Existing Conditions/Demo, 03=Concrete, 04=Masonry, 05=Metals, 06=Wood/Carpentry/Cabinets, 07=Thermal/Moisture/Roofing/Siding/Insulation, 08=Openings/Doors/Windows, 09=Finishes/Drywall/Flooring/Tile/Painting, 22=Plumbing, 23=HVAC, 26=Electrical, 31=Earthwork, 32=Exterior, 33=Utilities
 Return ONLY: {"sections":[{"name":"trade name","csiCode":"X.X01","low":0,"high":0}]}`
-    }], SYSTEM, 800, "claude-haiku-4-5-20251001");
-    const sectionResult = safeJSON(sectionRaw, "sections");
+    }], SYSTEM, 2000, "claude-sonnet-4-20250514");
+    let sectionResult = safeJSON(sectionRaw, "sections");
     sectionResult.sections = (sectionResult.sections||[]).map(s => ({...s, csiCode: s.csiCode || getBtInfo(s.name).labor}));
+
+    // ── Trade validation: inject any missing required trades ──
+    const requiredTrades = REQUIRED_TRADES_BY_TYPE[z.type] || REQUIRED_TRADES_BY_TYPE["Residential Remodel"] || [];
+    const existingNames = sectionResult.sections.map(s => s.name.toLowerCase());
+    const missingTrades = requiredTrades.filter(trade =>
+      !existingNames.some(name => name.includes(trade.toLowerCase()) || trade.toLowerCase().includes(name))
+    );
+    if(missingTrades.length > 0){
+      const totalBudget = zoneResult.zones.reduce((a,z) => a + z.low, 0);
+      for(const trade of missingTrades){
+        const estCost = Math.round(totalBudget * 0.03);
+        sectionResult.sections.push({
+          name: trade, csiCode: getBtInfo(trade).labor,
+          low: estCost, high: Math.round(estCost * 1.3),
+          _injected: true // flag for review
+        });
+      }
+      console.log("Injected missing trades:", missingTrades);
+    }
 
     btn.textContent = "⏳ Step 5 of 6 — Writing scope + GC costs…";
     const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+(z.low||0), 0);
@@ -1731,8 +1940,10 @@ Return ONLY: {"designPhase":"10-14 weeks","constructionPhase":"X-Y months","star
     appData.estimate = estimate;
     const suggested = calcRetainerSuggestion(estimate.totalLow);
     if(!appData.retainerAmount) appData.retainerAmount = suggested;
+    releaseWakeLock(wakeLock);
     render();
   } catch(e){
+    releaseWakeLock(wakeLock);
     err.textContent = "Error: " + e.message; err.classList.remove("hidden");
     btn.disabled = false; btn.textContent = "✦ Generate AI Estimate";
   }
@@ -1829,6 +2040,21 @@ function renderScope(){
           <option value="">Select project type…</option>
           ${ZONE_TYPES.map(t=>`<option ${z.type===t?"selected":""}>${esc(t)}</option>`).join("")}
         </select>
+      </div>
+      <div class="field"><label class="field-label">Finish Level</label>
+        <select onchange="appData.finishLevel=this.value">
+          ${FINISH_LEVELS.map(f=>`<option value="${f.value}" ${appData.finishLevel===f.value?"selected":""}>${f.label} — ${f.desc}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+        <div>
+          <label class="field-label" style="margin:0;">Davis-Bacon / Prevailing Wage</label>
+          <div style="font-size:11px;color:var(--stone-light);margin-top:2px;">Government projects requiring DOL wage rates</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" ${appData.davisBacon?"checked":""} onchange="appData.davisBacon=this.checked">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
       <div class="field"><label class="field-label">Estimated Square Footage (optional)</label>
         <input type="number" value="${esc(z.sqft)}" placeholder="e.g. 2400" oninput="appData.zones[0].sqft=this.value"/>
