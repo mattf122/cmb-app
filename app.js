@@ -46,7 +46,6 @@ let appData = {
   retainerAmount: "", clientSig: null, repSig: null,
   clientPrintName: "", repPrintName: "",
   clarifyingQuestions: [], clarifyingAnswers: {},
-  finishLevel: "Designer",
   davisBacon: false,
   marginPercent: 20
 };
@@ -358,7 +357,6 @@ Return ONLY this JSON array (4-8 realistic line items):
     wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT ${d.clientZip||""}`]);
     wsData.push(["Date:", new Date().toLocaleDateString()]);
     wsData.push(["Rep:", d.repName||""]);
-    wsData.push(["Finish Level:", appData.finishLevel||"Designer"]);
     wsData.push(["Total Budget Range:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
     wsData.push([]);
     
@@ -1142,7 +1140,6 @@ function startNewVisit(){
     retainerAmount: "", clientSig: null, repSig: null,
     clientPrintName: "", repPrintName: "",
     clarifyingQuestions: [], clarifyingAnswers: {},
-    finishLevel: "Designer",
     davisBacon: false,
     marginPercent: 20
   };
@@ -1405,7 +1402,6 @@ Return ONLY JSON array (4-6 items):
     wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT`]);
     wsData.push(["Date:", new Date().toLocaleDateString()]);
     wsData.push(["Rep:", d.repName||""]);
-    wsData.push(["Finish Level:", appData.finishLevel||"Designer"]);
     wsData.push(["Total Budget:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
     wsData.push([]);
     wsData.push(["PROJECT SUMMARY"]);
@@ -1593,7 +1589,6 @@ async function runAnalyzeScope(){
 
 PROJECT OVERVIEW:
 ${projectSummary}
-FINISH LEVEL: ${appData.finishLevel||"Designer"}
 OVERALL PROJECT NOTES: ${appData.projectNotes||"none provided"}
 SITE ADDRESS: ${appData.projectAddress||"unknown"}, ${appData.projectCity||"Montana"}
 ${visionContent.length > 0 ? "PHOTOS AND DOCUMENTS: Attached above." : "No photos provided."}
@@ -1652,7 +1647,7 @@ async function runGenerateEstimate(){
   btn.disabled = true; err.classList.add("hidden");
   const wakeLock = await acquireWakeLock();
   const z = appData.zones[0];
-  const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Finish: ${appData.finishLevel||"Designer"} | Notes: ${z.notes||"standard scope"}`;
+  const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"standard scope"}`;
 
   async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
@@ -1679,7 +1674,6 @@ async function runGenerateEstimate(){
 
   const isCommercial = (z.type||"").toLowerCase().includes("commercial");
   const isDavisBacon = appData.davisBacon;
-  const finishLevel = appData.finishLevel || "Designer";
 
   function buildSystemPrompt(){
     let sys = `You are the Chief Estimator at Copper Mountain Builders with extensive experience building residential and commercial projects in Northwest Montana. You know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction in Flathead Valley.`;
@@ -1726,21 +1720,40 @@ MONTANA REALITIES:
 - Standing seam standard (8-12 week lead time) | Windows 8-12 weeks | Permit review 4-6 weeks
 - Sub availability: framers 8-12 weeks out | WUI requirements add 10-15% to exterior
 
-2026 FLATHEAD VALLEY UNIT COSTS:
-Foundation: slab $9-12/SF, stem wall $38-48/SF | Framing: $5.50-7.50/SF walls
-Roofing: standing seam $24-30/SF | Exterior: LP SmartSide $12-16/SF, windows $900-1800 EA
-Insulation: spray foam $3-4/SF | Plumbing: full bath $14k-26k | Electrical: $14k-28k
-HVAC: $11k-21k | Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF
-Cabinetry kitchen: $24k-46k | Countertops: quartz $65-95/SF | Drywall: $2.80-3.60/SF
+2026 FLATHEAD VALLEY UNIT COSTS (MANDATORY — use these ranges, do NOT estimate below these):
+Foundation: slab $9-12/SF, stem wall $38-48/SF, full basement $28-38/SF
+Framing: walls $5.50-7.50/SF, trusses/roof $6-9/SF | Sheathing: $2.50-3.50/SF
+Roofing: standing seam metal $24-30/SF, asphalt $8-12/SF
+Exterior: LP SmartSide $12-16/SF, stone/cultured stone $28-45/SF, stucco $14-20/SF
+Windows: vinyl $900-1400 EA, wood-clad $1400-2200 EA, large fixed $2000-3500 EA
+Exterior doors: entry $2500-5000 EA, sliding glass $3000-6000 EA
+Interior doors: $400-800 EA installed
+Insulation: spray foam closed-cell $3-4/SF, batt $1.50-2.50/SF
+Drywall: hang/tape/texture $2.80-3.60/SF (ALWAYS include — every interior wall and ceiling)
+Painting: interior $2.50-4.00/SF walls+ceiling, exterior $3-5/SF (ALWAYS include)
+Trim/millwork: base/case/crown $18-28/LF installed
+Plumbing: rough-in $4500-7000 per bath, fixtures $8k-18k per bath, kitchen rough $3500-5000
+Electrical: rough-in $4-7/SF, fixtures/finish $3-5/SF, panel upgrade $3500-6000
+HVAC: forced air $11k-21k, mini-split $4500-7500/head, radiant floor $12-18/SF
+Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF, carpet $4-8/SF
+Cabinetry: kitchen $24k-46k, bathroom vanity $2500-6000 EA
+Countertops: quartz $65-95/SF, granite $55-85/SF, laminate $25-40/SF
+Tile: shower surround $2500-5000 EA, backsplash $1500-3000
+Demolition: interior selective $3-6/SF, full gut $8-15/SF
+Excavation: $3500-8000 per day, typical residential $8k-20k
+Concrete flatwork: $8-14/SF | Garage slab: $10-16/SF
 
-FINISH LEVEL: ${finishLevel}
-- Essential = clean, functional, mid-grade materials (use low end of unit cost ranges)
-- Designer = elevated finishes, custom details, mid-to-high materials (use mid-to-high ranges)
-- Luxury = top of market, bespoke everything (use high end + 15-25% premium)
-Adjust ALL unit costs and material selections to match the ${finishLevel} finish level.
+CRITICAL PRICING RULES:
+- These are 2026 Flathead Valley, Montana costs. This area is 15-25% MORE expensive than national averages.
+- ALWAYS use the MID-TO-HIGH end of these ranges for your LOW estimate. Use the HIGH end for your HIGH estimate.
+- Sub costs in Flathead Valley include mobilization premiums — subs drive 30+ minutes to most job sites.
+- Material delivery costs are higher due to distance from major distribution centers.
+- Do NOT underestimate. An estimate that is too low is worse than one that is too high. When in doubt, go higher.
+- Every interior space needs drywall AND paint. These are never optional on any project with walls.
 
 HARD PER-SF LIMITS (all-in including GC + 20% O&P):
-New construction: $200-320/SF | Remodel: $120-280/SF | ADU: $220-360/SF | Deck: $80-180/SF
+New construction: $250-375/SF | Remodel: $150-300/SF | ADU: $275-400/SF | Deck: $80-180/SF
+Kitchen remodel: $350-650/LF of cabinetry | Bathroom remodel: $25k-60k per bath
 
 RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
     return sys;
@@ -1760,7 +1773,7 @@ RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
 
     if(photosToAnalyze.length > 0){
       const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos and documents with the eye of an experienced Montana builder.
-PROJECT: ${projectSummary} | FINISH LEVEL: ${appData.finishLevel||"Designer"} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
+PROJECT: ${projectSummary} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
 NOTES: ${appData.projectNotes||"none"}
 PROJECT NOTES: ${z.notes||"none"}
 ${appData.davisBacon ? "THIS IS A DAVIS-BACON PREVAILING WAGE PROJECT." : ""}
@@ -1829,7 +1842,13 @@ ${complianceResult?"Code Notes:\n"+complianceResult+"\n":""}
 ${appData.projectNotes?"Overall Notes: "+appData.projectNotes+"\n":""}
 ${z.notes?"Project Notes: "+z.notes+"\n":""}
 ${qaContext?"Q&A:\n"+qaContext+"\n":""}
-LOW range = best case. HIGH range = reality. Include 20% O&P. Montana costs 15-25% more than Boise/Missoula.
+PRICING RULES:
+- LOW range = realistic best case using MID-TO-HIGH unit costs from the system prompt. NOT a lowball number.
+- HIGH range = what it will actually cost when selections are made and change orders happen. Use HIGH end of all ranges.
+- Include 20% O&P in all pricing.
+- Flathead Valley Montana costs 15-25% MORE than national averages. Do NOT use national pricing.
+- An estimate that is too low loses credibility with the client. When in doubt, estimate HIGHER.
+- Use the specific unit costs provided in the system prompt — they are based on actual 2026 Flathead Valley subcontractor bids.
 Return ONLY: {"zones":[{"name":"${z.type||"Project"}","low":0,"high":0,"notes":"2-3 sentence scope note"}]}`
     }], SYSTEM, 1200);
     const zoneResult = safeJSON(zoneRaw, "zones");
@@ -2039,11 +2058,6 @@ function renderScope(){
         <select onchange="appData.zones[0].type=this.value">
           <option value="">Select project type…</option>
           ${ZONE_TYPES.map(t=>`<option ${z.type===t?"selected":""}>${esc(t)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="field"><label class="field-label">Finish Level</label>
-        <select onchange="appData.finishLevel=this.value">
-          ${FINISH_LEVELS.map(f=>`<option value="${f.value}" ${appData.finishLevel===f.value?"selected":""}>${f.label} — ${f.desc}</option>`).join("")}
         </select>
       </div>
       <div class="field" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
