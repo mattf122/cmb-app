@@ -885,23 +885,43 @@ async function renderPdfToImages(file, maxPages=15){
   for(let p=1; p<=numPages; p++){
     try {
       const page = await pdf.getPage(p);
-      // Use moderate resolution — 800px wide keeps file sizes manageable
       const baseViewport = page.getViewport({scale:1});
-      const scale = 800 / baseViewport.width;
+      // Start at 800px, but try smaller if page is very tall (arch drawings)
+      let targetWidth = 800;
+      const aspectRatio = baseViewport.height / baseViewport.width;
+      if(aspectRatio > 2) targetWidth = 600; // very tall pages get smaller width
+
+      const scale = targetWidth / baseViewport.width;
       const viewport = page.getViewport({scale});
       const canvas = document.createElement("canvas");
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d");
       await page.render({canvasContext: ctx, viewport}).promise;
-      let result = canvas.toDataURL("image/jpeg", 0.50);
-      // Hard limit: 5MB raw = ~6M base64 chars
-      if(result.split(",")[1].length > 6_000_000){
-        result = await compressImage(result, 500, 0.4);
+
+      // Try progressively lower quality directly on the render canvas
+      let result = canvas.toDataURL("image/jpeg", 0.45);
+      if((result.split(",")[1]||"").length > 6_000_000){
+        // Re-render at smaller size directly (no Image round-trip)
+        const smallCanvas = document.createElement("canvas");
+        const sw = Math.round(canvas.width * 0.6);
+        const sh = Math.round(canvas.height * 0.6);
+        smallCanvas.width = sw; smallCanvas.height = sh;
+        smallCanvas.getContext("2d").drawImage(canvas, 0, 0, sw, sh);
+        result = smallCanvas.toDataURL("image/jpeg", 0.4);
+        smallCanvas.width = 0; smallCanvas.height = 0;
       }
-      if(result.split(",")[1].length > 6_000_000){
-        result = await compressImage(result, 350, 0.3);
+      if((result.split(",")[1]||"").length > 6_000_000){
+        // Even smaller
+        const tinyCanvas = document.createElement("canvas");
+        const tw = Math.round(canvas.width * 0.35);
+        const th = Math.round(canvas.height * 0.35);
+        tinyCanvas.width = tw; tinyCanvas.height = th;
+        tinyCanvas.getContext("2d").drawImage(canvas, 0, 0, tw, th);
+        result = tinyCanvas.toDataURL("image/jpeg", 0.35);
+        tinyCanvas.width = 0; tinyCanvas.height = 0;
       }
+
       pages.push(result);
       // Free canvas memory
       canvas.width = 0; canvas.height = 0;
@@ -932,13 +952,53 @@ function getAllPdfPageImages(maxTotal=15){
 // Use 4.5MB raw (~6M base64 chars) as safe threshold
 async function ensureUnder5MB(dataUrl){
   let img = dataUrl;
-  const MAX_B64_LEN = 6_000_000; // ~4.5MB raw, safe under 5MB limit
-  const b64 = () => img.split(",")[1] || "";
-  if(b64().length > MAX_B64_LEN) { console.log("Image too large, compressing to 700px..."); img = await compressImage(img, 700, 0.45); }
-  if(b64().length > MAX_B64_LEN) { console.log("Still too large, compressing to 500px..."); img = await compressImage(img, 500, 0.35); }
-  if(b64().length > MAX_B64_LEN) { console.log("Still too large, compressing to 350px..."); img = await compressImage(img, 350, 0.25); }
-  if(b64().length > MAX_B64_LEN) { console.log("Still too large, last resort 200px..."); img = await compressImage(img, 200, 0.2); }
+  const MAX_B64_LEN = 6_000_000;
+  const b64Len = () => (img.split(",")[1] || "").length;
+  const steps = [{w:700,q:0.45},{w:500,q:0.35},{w:350,q:0.25},{w:200,q:0.2}];
+  for(const step of steps){
+    if(b64Len() <= MAX_B64_LEN) break;
+    const prevLen = b64Len();
+    console.log(`Image ${prevLen} chars > ${MAX_B64_LEN}, compressing to ${step.w}px...`);
+    img = await forceCompress(img, step.w, step.q);
+    // If compression didn't help (Image failed to load), the data is probably too large
+    if(b64Len() >= prevLen * 0.95){
+      console.warn("Compression not reducing size — image may be corrupt or too large for Image element");
+      // Nuclear option: create a tiny placeholder
+      if(b64Len() > MAX_B64_LEN){
+        const c = document.createElement("canvas"); c.width=200; c.height=150;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle="#333"; ctx.fillRect(0,0,200,150);
+        ctx.fillStyle="#b87333"; ctx.font="14px Georgia";
+        ctx.fillText("Image too large", 30, 80);
+        img = c.toDataURL("image/jpeg", 0.5);
+      }
+      break;
+    }
+  }
   return img;
+}
+
+// Compression that doesn't silently fail — uses canvas directly if Image won't load
+async function forceCompress(dataUrl, maxWidth, quality){
+  return new Promise(resolve => {
+    const img = new Image();
+    const timeout = setTimeout(() => { console.warn("Image load timeout"); resolve(dataUrl); }, 5000);
+    img.onload = () => {
+      clearTimeout(timeout);
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if(w > maxWidth){ h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      clearTimeout(timeout);
+      console.warn("Image failed to load for compression, returning original");
+      resolve(dataUrl);
+    };
+    img.src = dataUrl;
+  });
 }
 
 // ── Image compression ─────────────────────────────────────────────────
