@@ -866,97 +866,47 @@ function generateProposalDocument(){
 // ── PDF.js setup ──────────────────────────────────────────────────────
 if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-async function renderPdfToImages(file, maxPages=15){
+// Extract text content from all pages of a PDF using pdf.js
+async function extractPdfText(file, maxPages=30){
   if(!window.pdfjsLib) throw new Error("PDF.js not loaded");
-  // Accept either a File object (preferred — avoids double memory) or a dataUrl string
   let pdfData;
   if(file instanceof File || file instanceof Blob){
-    const buf = await file.arrayBuffer();
-    pdfData = new Uint8Array(buf);
-  } else {
-    // Legacy dataUrl path
+    pdfData = new Uint8Array(await file.arrayBuffer());
+  } else if(typeof file === 'string' && file.startsWith('data:')){
     const raw = atob(file.split(",")[1]);
     pdfData = new Uint8Array(raw.length);
     for(let i=0; i<raw.length; i++) pdfData[i] = raw.charCodeAt(i);
+  } else {
+    throw new Error("Invalid PDF input");
   }
   const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
-  const pages = [];
   const numPages = Math.min(pdf.numPages, maxPages);
+  const allText = [];
   for(let p=1; p<=numPages; p++){
     try {
       const page = await pdf.getPage(p);
-      const baseViewport = page.getViewport({scale:1});
-      // Start at 800px, but try smaller if page is very tall (arch drawings)
-      let targetWidth = 800;
-      const aspectRatio = baseViewport.height / baseViewport.width;
-      if(aspectRatio > 2) targetWidth = 600; // very tall pages get smaller width
-
-      const scale = targetWidth / baseViewport.width;
-      const viewport = page.getViewport({scale});
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d");
-      await page.render({canvasContext: ctx, viewport}).promise;
-
-      // Try progressively lower quality directly on the render canvas
-      let result = canvas.toDataURL("image/jpeg", 0.45);
-      if((result.split(",")[1]||"").length > 6_000_000){
-        // Re-render at smaller size directly (no Image round-trip)
-        const smallCanvas = document.createElement("canvas");
-        const sw = Math.round(canvas.width * 0.6);
-        const sh = Math.round(canvas.height * 0.6);
-        smallCanvas.width = sw; smallCanvas.height = sh;
-        smallCanvas.getContext("2d").drawImage(canvas, 0, 0, sw, sh);
-        result = smallCanvas.toDataURL("image/jpeg", 0.4);
-        smallCanvas.width = 0; smallCanvas.height = 0;
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str).join(" ").replace(/\s+/g, " ").trim();
+      if(pageText.length > 5){
+        allText.push(`[Page ${p}] ${pageText}`);
       }
-      if((result.split(",")[1]||"").length > 6_000_000){
-        // Even smaller
-        const tinyCanvas = document.createElement("canvas");
-        const tw = Math.round(canvas.width * 0.35);
-        const th = Math.round(canvas.height * 0.35);
-        tinyCanvas.width = tw; tinyCanvas.height = th;
-        tinyCanvas.getContext("2d").drawImage(canvas, 0, 0, tw, th);
-        result = tinyCanvas.toDataURL("image/jpeg", 0.35);
-        tinyCanvas.width = 0; tinyCanvas.height = 0;
-      }
-
-      pages.push(result);
-      // Free canvas memory
-      canvas.width = 0; canvas.height = 0;
-    } catch(pageErr){
-      console.warn(`PDF page ${p} render failed:`, pageErr);
-      // Skip failed pages, continue with rest
+    } catch(e){
+      console.warn(`PDF page ${p} text extraction failed:`, e);
     }
   }
-  return pages;
+  return { numPages: pdf.numPages, pagesRead: numPages, text: allText.join("\n\n") };
 }
 
-function getAllPdfPageImages(maxTotal=15){
-  const pages = [];
+// Get all extracted PDF text across all uploaded documents
+function getAllPdfText(){
+  const texts = [];
   const allDocs = getAllDocs();
   for(const doc of allDocs){
-    if(doc.pdfPages && doc.pdfPages.length){
-      for(const pg of doc.pdfPages){
-        pages.push({image: pg, source: doc.name});
-        if(pages.length >= maxTotal) return pages;
-      }
+    if(doc.pdfText && doc.pdfText.text){
+      texts.push(`=== DOCUMENT: ${doc.name} (${doc.pdfText.numPages} pages) ===\n${doc.pdfText.text}`);
     }
   }
-  return pages;
-}
-
-// Ensure image is under Claude's 5MB raw limit
-// 5MB raw = ~6.99M base64 chars. Use 6M as safe threshold.
-async function ensureUnder5MB(dataUrl){
-  const MAX = 6_000_000;
-  const len = () => (dataUrl.split(",")[1] || "").length;
-  // Most photos after compressImage(800, 0.7) will already be under 5MB
-  if(len() <= MAX) return dataUrl;
-  // If still over, just skip it — don't corrupt the data
-  console.warn(`Image is ${Math.round(len()/1000)}KB base64, over ${MAX/1000}KB limit — skipping this image`);
-  return null; // Signal to caller to skip this image
+  return texts.join("\n\n");
 }
 
 // ── Image compression ─────────────────────────────────────────────────
@@ -1093,15 +1043,13 @@ async function handleDocuments(e, targetId, targetType){
     if(file.type === 'application/pdf'){
       try {
         showOdToast(`📄 Reading ${file.name}…`);
-        // Pass the File object directly — avoids creating a huge dataUrl in memory
-        doc.pdfPages = await renderPdfToImages(file, 15);
-        // Store a small placeholder instead of the full PDF dataUrl (saves memory)
-        doc.dataUrl = "data:application/pdf;base64,";
-        console.log(`PDF "${file.name}": rendered ${doc.pdfPages.length} pages`);
-        showOdToast(`📄 ${file.name}: ${doc.pdfPages.length} pages ready`);
+        doc.pdfText = await extractPdfText(file, 30);
+        doc.dataUrl = "data:application/pdf;base64,"; // placeholder — don't store the full PDF
+        console.log(`PDF "${file.name}": extracted text from ${doc.pdfText.pagesRead}/${doc.pdfText.numPages} pages (${doc.pdfText.text.length} chars)`);
+        showOdToast(`📄 ${file.name}: ${doc.pdfText.pagesRead} pages read`);
       } catch(err){
-        console.warn("PDF render failed:", err);
-        doc.pdfPages = [];
+        console.warn("PDF text extraction failed:", err);
+        doc.pdfText = { numPages: 0, pagesRead: 0, text: "" };
         showOdToast(`⚠ Failed to read ${file.name}`, true);
       }
     } else {
@@ -1130,7 +1078,7 @@ function docSection(targetType,targetId,label){
   return `<div class="field"><label class="field-label">${label}</label>
     <input type="file" id="${inputId}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic" multiple style="display:none" onchange="handleDocuments(event,'${targetId}','${targetType}')"/>
     <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);color:var(--copper);" onclick="document.getElementById('${inputId}').click()">📎 Attach Document</button>
-    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}${doc.pdfPages&&doc.pdfPages.length?`<span class="pdf-badge">${doc.pdfPages.length} pages</span>`:""}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
+    ${docs.length>0?`<div style="margin-top:8px;">${docs.map(doc=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--stone);border-radius:6px;margin-bottom:6px;border:1px solid var(--stone-light);"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:18px;">${docIcon(doc.type)}</span><div style="min-width:0;"><div style="font-size:12px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap;">${esc(doc.name)}${doc.pdfText&&doc.pdfText.pagesRead?`<span class="pdf-badge">${doc.pdfText.pagesRead} pages</span>`:""}</div><div style="font-size:10px;color:var(--stone-light);">${fmtSize(doc.size)}</div></div></div><button class="btn-danger" onclick="removeDoc('${targetType}','${targetId}','${doc.id}')">✕</button></div>`).join("")}</div>`:""}
   </div>`;
 }
 function getAllDocs(){
@@ -1151,9 +1099,9 @@ function autoSave(){
       ...z,
       photosBefore: (z.photosBefore||[]).map((_,i) => `[photo ${i+1}]`),
       photosInspo:  (z.photosInspo||[]).map((_,i) => `[photo ${i+1}]`),
-      docs: (z.docs||[]).map(d => ({...d, dataUrl: null, pdfPages: null}))
+      docs: (z.docs||[]).map(d => ({...d, dataUrl: null, pdfText: null}))
     }));
-    if(snapshot.projectDocs) snapshot.projectDocs = snapshot.projectDocs.map(d => ({...d, dataUrl: null, pdfPages: null}));
+    if(snapshot.projectDocs) snapshot.projectDocs = snapshot.projectDocs.map(d => ({...d, dataUrl: null, pdfText: null}));
     snapshot._step = currentStep;
     snapshot._savedAt = new Date().toISOString();
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshot));
@@ -1631,31 +1579,25 @@ async function runAnalyzeScope(){
     const projectSummary = `Project Type: ${z.type||"Not specified"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"no notes"}`;
     const visionContent = [];
     for(const photo of (z.photosBefore||[]).slice(0,6)){
-      const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
-      if(!c) continue;
+      const c = await compressImage(photo, 800, 0.7);
       visionContent.push({type:"text", text:"[Current site condition photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     for(const photo of (z.photosInspo||[]).slice(0,3)){
-      const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
-      if(!c) continue;
+      const c = await compressImage(photo, 800, 0.7);
       visionContent.push({type:"text", text:"[Client inspiration photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const allDocs = getAllDocs();
     for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,3)){
-      const c = await ensureUnder5MB(await compressImage(doc.dataUrl, 800, 0.7));
-      if(!c) continue;
+      const c = await compressImage(doc.dataUrl, 800, 0.7);
       visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
-    const pdfPages = getAllPdfPageImages(10);
-    for(const pg of pdfPages){
-      if(status) status.textContent = `Reading blueprint page from ${pg.source}…`;
-      const c = await ensureUnder5MB(await compressImage(pg.image, 800, 0.6));
-      if(!c) continue;
-      visionContent.push({type:"text", text:`[Blueprint/plan page from ${pg.source}]:`});
-      visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
+    // Include extracted PDF text as regular text content (no image size limits)
+    const pdfText = getAllPdfText();
+    if(pdfText){
+      visionContent.push({type:"text", text:`\n\n=== CONSTRUCTION DOCUMENTS — EXTRACTED TEXT ===\nThe following text was extracted directly from uploaded PDF blueprints and construction documents. This contains dimensions, specifications, schedules, notes, and all written content from the plans. Use this information for accurate scope and pricing.\n\n${pdfText}`});
     }
     const analysisPrompt = `You are a senior estimator at Copper Mountain Builders reviewing a site visit. Based on what you can see and read, ask up to 10 targeted follow-up questions to fill in gaps preventing an accurate estimate.
 
@@ -1837,14 +1779,14 @@ RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
     let siteNotes = "";
     const allDocs = getAllDocs();
     const photosToAnalyze = [];
-    for(const photo of (z.photosBefore||[]).slice(0,10)) photosToAnalyze.push({photo, label:"current site condition", isDoc:false});
-    for(const photo of (z.photosInspo||[]).slice(0,4)) photosToAnalyze.push({photo, label:"client inspiration", isDoc:false});
-    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,4)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name, isDoc:true});
-    const pdfPages = getAllPdfPageImages(15);
-    for(const pg of pdfPages) photosToAnalyze.push({photo:pg.image, label:`Blueprint page from ${pg.source}`, isDoc:true});
+    for(const photo of (z.photosBefore||[]).slice(0,10)) photosToAnalyze.push({photo, label:"current site condition"});
+    for(const photo of (z.photosInspo||[]).slice(0,4)) photosToAnalyze.push({photo, label:"client inspiration"});
+    for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,4)) photosToAnalyze.push({photo:doc.dataUrl, label:doc.name});
+    // PDF text extracted separately — no images needed
+    const pdfText = getAllPdfText();
 
-    if(photosToAnalyze.length > 0){
-      const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos and documents with the eye of an experienced Montana builder.
+    if(photosToAnalyze.length > 0 || pdfText){
+      const visionContent = [{type:"text", text:`You are the Chief Estimator at Copper Mountain Builders. Analyze these photos and construction documents with the eye of an experienced Montana builder.
 PROJECT: ${projectSummary} | LOCATION: ${appData.projectAddress}, ${appData.projectCity}, Montana
 NOTES: ${appData.projectNotes||"none"}
 PROJECT NOTES: ${z.notes||"none"}
@@ -1858,22 +1800,21 @@ For each SITE PHOTO:
 - Identify every trade that will be needed based on what you see
 - Note existing conditions: age, wear, code compliance issues, structural concerns
 
-For each BLUEPRINT/PLAN PAGE:
-- Extract ALL dimensions, room labels, square footages
-- Note window/door schedules, finish schedules, structural specifications
-- Identify mechanical/electrical/plumbing layouts
-- Note any specifications or product callouts
-- Extract every detail that affects pricing
-
 Be specific and quantitative. Reference code sections where applicable. 800-1500 words.`}];
-      for(const {photo, label, isDoc} of photosToAnalyze.slice(0,18)){
+
+      // Add photos as vision images
+      for(const {photo, label} of photosToAnalyze.slice(0,14)){
         btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
-        const maxPx = isDoc ? 800 : 800;
-        const compressed = await ensureUnder5MB(await compressImage(photo, maxPx, 0.7));
-        if(!compressed) continue; // Skip images that are too large
+        const compressed = await compressImage(photo, 800, 0.7);
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
+
+      // Add PDF text as regular text content — no size limits
+      if(pdfText){
+        visionContent.push({type:"text", text:`\n\n=== CONSTRUCTION DOCUMENTS — EXTRACTED TEXT ===\nThe following text was extracted from uploaded PDF blueprints and construction documents. This contains dimensions, specifications, schedules, notes, and all written content from the plans. Analyze this thoroughly for scope, quantities, and pricing impacts.\n\n${pdfText}`});
+      }
+
       const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:3000, messages:[{role:"user",content:visionContent}]})
@@ -1907,6 +1848,7 @@ Write as a professional narrative report with ALL CAPS section headings. Plain p
     } catch(e){ console.warn("Compliance failed:", e.message); complianceResult = "Code compliance review unavailable. Recommend manual review."; }
 
     btn.textContent = "⏳ Step 3 of 6 — Pricing project…";
+    const pdfTextForEstimate = getAllPdfText();
     const zoneRaw = await workerCall([{role:"user", content:
       `Price this Montana project with Flathead Valley expertise.
 PROJECT: ${projectSummary}
@@ -1915,6 +1857,7 @@ ${complianceResult?"Code Notes:\n"+complianceResult+"\n":""}
 ${appData.projectNotes?"Overall Notes: "+appData.projectNotes+"\n":""}
 ${z.notes?"Project Notes: "+z.notes+"\n":""}
 ${qaContext?"Q&A:\n"+qaContext+"\n":""}
+${pdfTextForEstimate?"CONSTRUCTION DOCUMENTS (extracted from blueprints):\n"+pdfTextForEstimate.slice(0,3000)+"\n":""}
 PRICING RULES:
 - LOW range = realistic best case using MID-TO-HIGH unit costs from the system prompt. NOT a lowball number.
 - HIGH range = what it will actually cost when selections are made and change orders happen. Use HIGH end of all ranges.
