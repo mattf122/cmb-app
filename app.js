@@ -976,9 +976,41 @@ function stopVoice(btnId){
 // ── Photo handling ───────────────────────────────────────────────────
 async function handlePhotos(e, zoneId, type){
   const files = Array.from(e.target.files);
-  const urls = await Promise.all(files.map(fileToDataURL));
-  const zone = appData.zones.find(z=>z.id===zoneId);
-  if(zone) zone[type] = [...(zone[type]||[]), ...urls];
+  // Auto-route PDFs and documents to the document handler instead
+  const imageFiles = [];
+  const docFiles = [];
+  for(const file of files){
+    if(file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')){
+      docFiles.push(file);
+    } else {
+      imageFiles.push(file);
+    }
+  }
+  if(docFiles.length > 0){
+    showOdToast(`📄 ${docFiles.length} PDF(s) moved to Documents for text extraction`);
+    // Process PDFs through the document handler
+    for(const file of docFiles){
+      const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl: null };
+      try {
+        showOdToast(`📄 Reading ${file.name}…`);
+        doc.pdfText = await extractPdfText(file, 30);
+        doc.dataUrl = "data:application/pdf;base64,";
+        console.log(`PDF "${file.name}": extracted ${doc.pdfText.pagesRead} pages`);
+        showOdToast(`📄 ${file.name}: ${doc.pdfText.pagesRead} pages read`);
+      } catch(err){
+        console.warn("PDF extraction failed:", err);
+        doc.pdfText = { numPages: 0, pagesRead: 0, text: "" };
+        showOdToast(`⚠ Failed to read ${file.name}`, true);
+      }
+      const zone = appData.zones.find(z=>z.id===zoneId);
+      if(zone){ if(!zone.docs) zone.docs=[]; zone.docs.push(doc); }
+    }
+  }
+  if(imageFiles.length > 0){
+    const urls = await Promise.all(imageFiles.map(fileToDataURL));
+    const zone = appData.zones.find(z=>z.id===zoneId);
+    if(zone) zone[type] = [...(zone[type]||[]), ...urls];
+  }
   e.target.value = "";
   render();
 }
@@ -996,8 +1028,8 @@ function photoSection(zoneId, type, label){
   return `<div class="field">
     <label class="field-label">${label}</label>
     <div style="display:flex;gap:8px;margin-bottom:6px;">
-      <input type="file" id="${camId}" accept="image/*" multiple capture="environment" style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
-      <input type="file" id="${libId}" accept="image/*" multiple style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
+      <input type="file" id="${camId}" accept="image/*,.pdf" multiple capture="environment" style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
+      <input type="file" id="${libId}" accept="image/*,.pdf" multiple style="display:none" onchange="handlePhotos(event,'${zoneId}','${type}')"/>
       <button class="btn-small" onclick="document.getElementById('${camId}').click()">📷 Camera</button>
       <button class="btn-small" style="background:var(--stone-mid);border:1px solid var(--copper);" onclick="document.getElementById('${libId}').click()">🖼 Library</button>
     </div>
