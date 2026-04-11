@@ -876,13 +876,18 @@ async function renderPdfToImages(dataUrl, maxPages=15){
   const numPages = Math.min(pdf.numPages, maxPages);
   for(let p=1; p<=numPages; p++){
     const page = await pdf.getPage(p);
-    const scale = 1200 / page.getViewport({scale:1}).width; // ~1200px wide
+    const scale = 1000 / page.getViewport({scale:1}).width; // ~1000px wide
     const viewport = page.getViewport({scale});
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({canvasContext: canvas.getContext("2d"), viewport}).promise;
-    pages.push(canvas.toDataURL("image/jpeg", 0.8));
+    let result = canvas.toDataURL("image/jpeg", 0.65);
+    // If still over 4MB base64 (~3MB raw), re-compress smaller
+    if(result.length > 4_000_000){
+      result = await compressImage(result, 800, 0.5);
+    }
+    pages.push(result);
   }
   return pages;
 }
@@ -1581,7 +1586,7 @@ async function runAnalyzeScope(){
     const pdfPages = getAllPdfPageImages(10);
     for(const pg of pdfPages){
       if(status) status.textContent = `Reading blueprint page from ${pg.source}…`;
-      const c = await compressImage(pg.image, 1200, 0.8);
+      const c = await compressImage(pg.image, 1000, 0.6);
       visionContent.push({type:"text", text:`[Blueprint/plan page from ${pg.source}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
@@ -1796,7 +1801,7 @@ For each BLUEPRINT/PLAN PAGE:
 Be specific and quantitative. Reference code sections where applicable. 800-1500 words.`}];
       for(const {photo, label, isDoc} of photosToAnalyze.slice(0,18)){
         btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
-        const maxPx = isDoc ? 1200 : 800;
+        const maxPx = isDoc ? 1000 : 800;
         const compressed = await compressImage(photo, maxPx, 0.7);
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
