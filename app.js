@@ -906,6 +906,16 @@ function getAllPdfPageImages(maxTotal=15){
   return pages;
 }
 
+// Ensure image is under Claude's 5MB limit (base64 = ~1.37x raw bytes)
+async function ensureUnder5MB(dataUrl){
+  let img = dataUrl;
+  const MAX_B64 = 4_800_000; // ~3.5MB raw, safe margin under 5MB
+  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 800, 0.5);
+  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 600, 0.4);
+  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 400, 0.3);
+  return img;
+}
+
 // ── Image compression ─────────────────────────────────────────────────
 async function compressImage(dataUrl, maxWidth=800, quality=0.7){
   return new Promise(resolve => {
@@ -1568,25 +1578,25 @@ async function runAnalyzeScope(){
     const projectSummary = `Project Type: ${z.type||"Not specified"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"no notes"}`;
     const visionContent = [];
     for(const photo of (z.photosBefore||[]).slice(0,6)){
-      const c = await compressImage(photo, 800, 0.7);
+      const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
       visionContent.push({type:"text", text:"[Current site condition photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     for(const photo of (z.photosInspo||[]).slice(0,3)){
-      const c = await compressImage(photo, 800, 0.7);
+      const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
       visionContent.push({type:"text", text:"[Client inspiration photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const allDocs = getAllDocs();
     for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,3)){
-      const c = await compressImage(doc.dataUrl, 800, 0.7);
+      const c = await ensureUnder5MB(await compressImage(doc.dataUrl, 800, 0.7));
       visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const pdfPages = getAllPdfPageImages(10);
     for(const pg of pdfPages){
       if(status) status.textContent = `Reading blueprint page from ${pg.source}…`;
-      const c = await compressImage(pg.image, 1000, 0.6);
+      const c = await ensureUnder5MB(await compressImage(pg.image, 1000, 0.6));
       visionContent.push({type:"text", text:`[Blueprint/plan page from ${pg.source}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
@@ -1802,7 +1812,7 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
       for(const {photo, label, isDoc} of photosToAnalyze.slice(0,18)){
         btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
         const maxPx = isDoc ? 1000 : 800;
-        const compressed = await compressImage(photo, maxPx, 0.7);
+        const compressed = await ensureUnder5MB(await compressImage(photo, maxPx, 0.7));
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
