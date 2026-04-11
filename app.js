@@ -866,28 +866,49 @@ function generateProposalDocument(){
 // ── PDF.js setup ──────────────────────────────────────────────────────
 if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-async function renderPdfToImages(dataUrl, maxPages=15){
+async function renderPdfToImages(file, maxPages=15){
   if(!window.pdfjsLib) throw new Error("PDF.js not loaded");
-  const raw = atob(dataUrl.split(",")[1]);
-  const arr = new Uint8Array(raw.length);
-  for(let i=0; i<raw.length; i++) arr[i] = raw.charCodeAt(i);
-  const pdf = await pdfjsLib.getDocument({data: arr}).promise;
+  // Accept either a File object (preferred — avoids double memory) or a dataUrl string
+  let pdfData;
+  if(file instanceof File || file instanceof Blob){
+    const buf = await file.arrayBuffer();
+    pdfData = new Uint8Array(buf);
+  } else {
+    // Legacy dataUrl path
+    const raw = atob(file.split(",")[1]);
+    pdfData = new Uint8Array(raw.length);
+    for(let i=0; i<raw.length; i++) pdfData[i] = raw.charCodeAt(i);
+  }
+  const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
   const pages = [];
   const numPages = Math.min(pdf.numPages, maxPages);
   for(let p=1; p<=numPages; p++){
-    const page = await pdf.getPage(p);
-    const scale = 1000 / page.getViewport({scale:1}).width; // ~1000px wide
-    const viewport = page.getViewport({scale});
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({canvasContext: canvas.getContext("2d"), viewport}).promise;
-    let result = canvas.toDataURL("image/jpeg", 0.65);
-    // If still over 4MB base64 (~3MB raw), re-compress smaller
-    if(result.length > 4_000_000){
-      result = await compressImage(result, 800, 0.5);
+    try {
+      const page = await pdf.getPage(p);
+      // Use moderate resolution — 800px wide keeps file sizes manageable
+      const baseViewport = page.getViewport({scale:1});
+      const scale = 800 / baseViewport.width;
+      const viewport = page.getViewport({scale});
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d");
+      await page.render({canvasContext: ctx, viewport}).promise;
+      let result = canvas.toDataURL("image/jpeg", 0.55);
+      // Hard limit check — progressively shrink if needed
+      if(result.split(",")[1].length > 4_800_000){
+        result = await compressImage(result, 600, 0.45);
+      }
+      if(result.split(",")[1].length > 4_800_000){
+        result = await compressImage(result, 400, 0.35);
+      }
+      pages.push(result);
+      // Free canvas memory
+      canvas.width = 0; canvas.height = 0;
+    } catch(pageErr){
+      console.warn(`PDF page ${p} render failed:`, pageErr);
+      // Skip failed pages, continue with rest
     }
-    pages.push(result);
   }
   return pages;
 }
@@ -1046,13 +1067,23 @@ function sigBlock(canvasId, sigKey, label){
 async function handleDocuments(e, targetId, targetType){
   const files = Array.from(e.target.files);
   for(const file of files){
-    const dataUrl = await fileToDataURL(file);
-    const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl };
+    const doc = { id:"d"+Date.now()+Math.random().toString(36).slice(2,6), name:file.name, type:file.type, size:file.size, dataUrl: null };
     if(file.type === 'application/pdf'){
       try {
-        doc.pdfPages = await renderPdfToImages(dataUrl, 15);
+        showOdToast(`📄 Reading ${file.name}…`);
+        // Pass the File object directly — avoids creating a huge dataUrl in memory
+        doc.pdfPages = await renderPdfToImages(file, 15);
+        // Store a small placeholder instead of the full PDF dataUrl (saves memory)
+        doc.dataUrl = "data:application/pdf;base64,";
         console.log(`PDF "${file.name}": rendered ${doc.pdfPages.length} pages`);
-      } catch(err){ console.warn("PDF render failed:", err); doc.pdfPages = []; }
+        showOdToast(`📄 ${file.name}: ${doc.pdfPages.length} pages ready`);
+      } catch(err){
+        console.warn("PDF render failed:", err);
+        doc.pdfPages = [];
+        showOdToast(`⚠ Failed to read ${file.name}`, true);
+      }
+    } else {
+      doc.dataUrl = await fileToDataURL(file);
     }
     if(targetType==="project"){
       if(!appData.projectDocs) appData.projectDocs=[];
