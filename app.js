@@ -948,57 +948,15 @@ function getAllPdfPageImages(maxTotal=15){
 }
 
 // Ensure image is under Claude's 5MB raw limit
-// 5MB raw = 5,242,880 bytes. base64 is 4/3 of raw, so 5MB raw = ~6,990,507 base64 chars
-// Use 4.5MB raw (~6M base64 chars) as safe threshold
+// 5MB raw = ~6.99M base64 chars. Use 6M as safe threshold.
 async function ensureUnder5MB(dataUrl){
-  let img = dataUrl;
-  const MAX_B64_LEN = 6_000_000;
-  const b64Len = () => (img.split(",")[1] || "").length;
-  const steps = [{w:700,q:0.45},{w:500,q:0.35},{w:350,q:0.25},{w:200,q:0.2}];
-  for(const step of steps){
-    if(b64Len() <= MAX_B64_LEN) break;
-    const prevLen = b64Len();
-    console.log(`Image ${prevLen} chars > ${MAX_B64_LEN}, compressing to ${step.w}px...`);
-    img = await forceCompress(img, step.w, step.q);
-    // If compression didn't help (Image failed to load), the data is probably too large
-    if(b64Len() >= prevLen * 0.95){
-      console.warn("Compression not reducing size — image may be corrupt or too large for Image element");
-      // Nuclear option: create a tiny placeholder
-      if(b64Len() > MAX_B64_LEN){
-        const c = document.createElement("canvas"); c.width=200; c.height=150;
-        const ctx = c.getContext("2d");
-        ctx.fillStyle="#333"; ctx.fillRect(0,0,200,150);
-        ctx.fillStyle="#b87333"; ctx.font="14px Georgia";
-        ctx.fillText("Image too large", 30, 80);
-        img = c.toDataURL("image/jpeg", 0.5);
-      }
-      break;
-    }
-  }
-  return img;
-}
-
-// Compression that doesn't silently fail — uses canvas directly if Image won't load
-async function forceCompress(dataUrl, maxWidth, quality){
-  return new Promise(resolve => {
-    const img = new Image();
-    const timeout = setTimeout(() => { console.warn("Image load timeout"); resolve(dataUrl); }, 5000);
-    img.onload = () => {
-      clearTimeout(timeout);
-      const canvas = document.createElement("canvas");
-      let w = img.width, h = img.height;
-      if(w > maxWidth){ h = Math.round(h * maxWidth / w); w = maxWidth; }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => {
-      clearTimeout(timeout);
-      console.warn("Image failed to load for compression, returning original");
-      resolve(dataUrl);
-    };
-    img.src = dataUrl;
-  });
+  const MAX = 6_000_000;
+  const len = () => (dataUrl.split(",")[1] || "").length;
+  // Most photos after compressImage(800, 0.7) will already be under 5MB
+  if(len() <= MAX) return dataUrl;
+  // If still over, just skip it — don't corrupt the data
+  console.warn(`Image is ${Math.round(len()/1000)}KB base64, over ${MAX/1000}KB limit — skipping this image`);
+  return null; // Signal to caller to skip this image
 }
 
 // ── Image compression ─────────────────────────────────────────────────
@@ -1674,24 +1632,28 @@ async function runAnalyzeScope(){
     const visionContent = [];
     for(const photo of (z.photosBefore||[]).slice(0,6)){
       const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
+      if(!c) continue;
       visionContent.push({type:"text", text:"[Current site condition photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     for(const photo of (z.photosInspo||[]).slice(0,3)){
       const c = await ensureUnder5MB(await compressImage(photo, 800, 0.7));
+      if(!c) continue;
       visionContent.push({type:"text", text:"[Client inspiration photo]:"});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const allDocs = getAllDocs();
     for(const doc of allDocs.filter(d=>d.type.includes("image")).slice(0,3)){
       const c = await ensureUnder5MB(await compressImage(doc.dataUrl, 800, 0.7));
+      if(!c) continue;
       visionContent.push({type:"text", text:`[Uploaded document: ${doc.name}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
     const pdfPages = getAllPdfPageImages(10);
     for(const pg of pdfPages){
       if(status) status.textContent = `Reading blueprint page from ${pg.source}…`;
-      const c = await ensureUnder5MB(await compressImage(pg.image, 1000, 0.6));
+      const c = await ensureUnder5MB(await compressImage(pg.image, 800, 0.6));
+      if(!c) continue;
       visionContent.push({type:"text", text:`[Blueprint/plan page from ${pg.source}]:`});
       visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:c.split(",")[1]}});
     }
@@ -1906,8 +1868,9 @@ For each BLUEPRINT/PLAN PAGE:
 Be specific and quantitative. Reference code sections where applicable. 800-1500 words.`}];
       for(const {photo, label, isDoc} of photosToAnalyze.slice(0,18)){
         btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
-        const maxPx = isDoc ? 1000 : 800;
+        const maxPx = isDoc ? 800 : 800;
         const compressed = await ensureUnder5MB(await compressImage(photo, maxPx, 0.7));
+        if(!compressed) continue; // Skip images that are too large
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
       }
