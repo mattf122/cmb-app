@@ -1,5 +1,5 @@
 // ── State ──────────────────────────────────────────────────────────
-const STEPS = ["Client","Scope","Estimate","Review & Sign"];
+const STEPS = ["Client","Scope","Estimate","Review","Sign"];
 const ZONE_TYPES = [
   "Residential Remodel",
   "Commercial Remodel / Tenant Improvement",
@@ -520,6 +520,98 @@ www.coppermountainbuilders.com
 *This is a conceptual budget prepared prior to design development. Actual costs will vary based on final drawings, material selections, site conditions, and contractor bids.`
   );
   window.location.href = `mailto:${d.clientEmail||""}?subject=${subject}&body=${body}`;
+}
+
+function generateSignedContractPdf(){
+  const d = appData;
+  const dt = today();
+  const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_Design-Build_Agreement_" + new Date().toLocaleDateString().replace(/\//g,"-") + ".doc";
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><style>
+    @page{size:8.5in 11in;margin:1in} body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;color:#2C2A27;margin:0;padding:20px}
+    h1{font-size:20pt;font-weight:bold;color:#B87333;text-align:center;margin-bottom:5px}
+    h2{font-size:11pt;font-weight:bold;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin:20px 0 8px 0;border-bottom:1px solid #e0d0b0;padding-bottom:4px}
+    p{margin:8px 0;text-align:justify}
+    .header{text-align:center;border-bottom:3px solid #B87333;padding-bottom:15px;margin-bottom:20px}
+    .subtitle{font-size:14pt;color:#333;text-align:center;margin-bottom:20px}
+    .info{font-size:11pt;text-align:center;margin:4px 0;color:#555}
+    .sig-section{margin-top:40px;display:flex;gap:40px}
+    .sig-block{flex:1}
+    .sig-line{border-bottom:1px solid #333;height:50px;margin-bottom:4px}
+    .sig-label{font-size:10pt;color:#888}
+    .sig-img{height:50px;object-fit:contain;border-bottom:1px solid #333}
+    .page-break{page-break-before:always}
+  </style></head><body>
+    <div class="header">
+      <h1>COPPER MOUNTAIN BUILDERS</h1>
+      <div class="subtitle">Design-Build Agreement</div>
+      <div class="info"><strong>Client:</strong> ${esc(d.clientName)}</div>
+      <div class="info"><strong>Project:</strong> ${esc(d.projectAddress)}, ${esc(d.projectCity)}, MT</div>
+      <div class="info"><strong>Date:</strong> ${dt}</div>
+      <div class="info"><strong>Prepared by:</strong> ${esc(d.repName)}</div>
+    </div>
+
+    <p>Thank you for choosing <strong>Copper Mountain Builders</strong> for your project in the Flathead Valley. This Agreement explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+
+    <h2>1. What We Will Do for You</h2>
+    <p>We will provide professional preconstruction design services using our proven 5-Step Design-Build Program (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (construction) is handled under a separate full construction contract. We have the first right of refusal to build your project.</p>
+
+    <h2>2. Your Investment (Compensation)</h2>
+    <p>Hourly rates include a 20% markup for overhead and management:</p>
+    <p>· Principal / General Management: <strong>$250.00/hr</strong><br/>· Architectural Design Services: <strong>$250.00/hr</strong><br/>· Consultants / Specialty Engineering: <strong>$250.00/hr</strong><br/>· Interior/Exterior Designer: <strong>$150.00/hr</strong></p>
+    <p><strong>Initial Non-Refundable Retainer: ${fmt$(d.retainerAmount||0)}</strong> — payable when you sign and applied to your first invoice(s). Invoices are sent monthly or at phase milestones. Payment is due within 10 calendar days. Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law). Final design documents are released only after all outstanding amounts are paid in full.</p>
+
+    <h2>3. How Long This Lasts &amp; What Happens if We Stop Early</h2>
+    <p>This Agreement begins on the date signed and continues until we complete Steps 1–4, or until one of us ends it with 14 days written notice. If the Agreement ends early: you pay for all work completed and expenses incurred; you pay a Termination Fee of 10% of the estimated construction cost (minimum $5,000); all design materials must be returned or destroyed. If you later use our designs with another contractor without written permission and full payment, you owe a Design Licensing Fee equal to 200% of total design fees paid or estimated.</p>
+
+    <h2>4. Who Owns the Designs</h2>
+    <p>All drawings, renderings, plans, and materials we create belong entirely to us and are protected by copyright law. You receive no right to copy, modify, or use the designs for construction until: (a) you have paid all fees in full, AND (b) you have signed the full construction contract with us OR paid the Design Licensing Fee. Unauthorized use is copyright infringement. We may file a mechanic's lien on your property for any unpaid amounts.</p>
+
+    <h2>5. Our Promises to You</h2>
+    <p>· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
+
+    <h2>6. Your Protections</h2>
+    <p>· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
+
+    <h2>7. How We Communicate</h2>
+    <p>All notices must be in writing. Our address: Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903.</p>
+
+    <h2>8. Other Important Information</h2>
+    <p>· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
+
+    <div class="page-break"></div>
+
+    <h2>Exhibit A — 5-Step Design-Build Program</h2>
+    <p><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> Site evaluation, two client meetings, vision and inspiration discovery.</p>
+    <p><strong>STEP 2 – Schematic Design:</strong> Structural and energy considerations, two client meetings, floor plan finalization.</p>
+    <p><strong>STEP 3 – Design Development:</strong> Final plans, elevations, renderings, two client meetings, plans to engineering.</p>
+    <p><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, SOW, sub bids, permits, all costs finalized.</p>
+    <p><strong>STEP 5 – Construction:</strong> Performed under separate construction contract.</p>
+
+    <h2>Exhibit B — Insurance &amp; Montana Disclosures</h2>
+    <p>We maintain general liability insurance and appropriate workers' compensation coverage as required by law. One-year express warranty on workmanship and materials (per construction contract). Full certificates available upon request.</p>
+
+    <div style="margin-top:50px;display:grid;grid-template-columns:1fr 1fr;gap:60px;">
+      <div>
+        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Client</p>
+        ${d.clientSig?`<img src="${d.clientSig}" style="width:100%;height:60px;object-fit:contain;" alt="Client Signature"/>`:`<div style="height:60px;border-bottom:1px solid #333;"></div>`}
+        <p style="margin-top:6px;">${esc(d.clientPrintName||d.clientName)}</p>
+        <p style="font-size:10pt;color:#888;">${dt}</p>
+      </div>
+      <div>
+        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Contractor</p>
+        ${d.repSig?`<img src="${d.repSig}" style="width:100%;height:60px;object-fit:contain;" alt="Contractor Signature"/>`:`<div style="height:60px;border-bottom:1px solid #333;"></div>`}
+        <p style="margin-top:6px;">${esc(d.repPrintName||d.repName)}</p>
+        <p style="font-size:10pt;color:#888;">Copper Mountain Builders</p>
+      </div>
+    </div>
+  </body></html>`;
+  const blob = new Blob([html], {type: 'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function generateProposalDocument(){
@@ -1955,13 +2047,19 @@ PART 1 — GENERAL CONDITIONS:
 Duration: 1 month per $50k (minimum 3 months). Include permits, engineering, superintendent, temp facilities, dumpsters, builder's risk, 5% contingency. Realistic Flathead Valley costs.
 
 PART 2 — SCOPE OF WORK NARRATIVE (400-600 words):
-Write as a working contractor would. Use "we" for CMB. Five sections with ALL CAPS headers:
-PROJECT DESCRIPTION — what type of work, what we observed, specific conditions from notes/photos
-SCOPE OF WORK INCLUDES — specific line items, quantities from notes, contractor language
-CLARIFICATIONS AND EXCLUSIONS — what's not included, assumptions made, finish selections TBD
-BUDGET AND SCHEDULE CONTEXT — what drives the cost range, Montana-specific factors, lead times
-NEXT STEPS — retainer, design phase deliverables, timing constraints
-TONE: Direct, specific, grounded. No hollow adjectives (stunning/transformative/seamlessly). No expertise claims. No age references. Write like a person, not a brochure.
+This will be handed directly to the client. Write so a homeowner with no construction background can understand exactly what they're getting. Use "we" for CMB. Five sections with ALL CAPS headers:
+
+YOUR PROJECT — Plain description of what type of work this is and what we saw at the site. Describe the project in terms the client used. Reference specific rooms, features, and conditions from the notes/photos.
+
+WHAT'S INCLUDED — Clear list of what CMB will do. Use simple terms: "Install new windows throughout" not "procure and install fenestration assemblies." Include quantities from notes where available. Each item should start with a verb (Install, Remove, Build, Replace, etc).
+
+WHAT'S NOT INCLUDED — Be specific about exclusions so there are no surprises. Common items: landscaping, furniture, appliances (unless noted), permits beyond building permit, engineering beyond structural, hazmat abatement (unless noted). Also note what decisions the client still needs to make (flooring selections, fixture choices, etc).
+
+BUDGET CONTEXT — In 2-3 sentences, explain what drives the cost range. Reference Montana-specific factors the client should understand: material lead times, seasonal construction windows, Flathead Valley labor market. Don't apologize for costs, just explain them plainly.
+
+GETTING STARTED — What happens next: sign the design-build agreement, pay the retainer, schedule the first design meeting. Keep it to 2-3 sentences.
+
+TONE: Write like you're talking to the client across their kitchen table. Direct, clear, no jargon. No hollow adjectives (stunning/transformative/seamlessly). No expertise claims. No age references about the house or the client.
 
 PART 3 — COMPLIANCE NOTES (internal rep use only): Flag code issues or permit risks.
 
@@ -2322,7 +2420,7 @@ function renderEstimate(){
     </div>`:""}
     <div id="est-error" class="error-msg hidden"></div>
     <button class="btn-secondary" onclick="appData.estimate=null;render()">↻ Regenerate</button>
-    <button class="btn-primary" onclick="goTo(3)">Next: Review & Sign →</button>
+    <button class="btn-primary" onclick="goTo(3)">Next: Review →</button>
     <button class="btn-secondary" onclick="goTo(1)">← Back</button>
   </div>`;
 }
@@ -2349,10 +2447,42 @@ function renderReview(){
       <div class="estimate-row" style="border:none;padding-top:12px;"><span style="font-weight:bold;font-size:14px;">TOTAL RANGE</span><span style="font-weight:bold;font-size:16px;color:var(--gold);">${fmt$(est.totalLow)} – ${fmt$(est.totalHigh)}</span></div>
       <div class="estimate-row"><span style="font-size:13px;color:var(--copper-lt);">Design Retainer</span><span style="color:var(--copper-lt);font-size:14px;">${fmt$(d.retainerAmount||0)}</span></div>
     </div>`:""}
+    ${est&&est.summary?`<div class="card">
+      <div class="section-title">Scope of Work</div>
+      <div style="font-size:13px;color:var(--cream-dk);line-height:1.8;white-space:pre-wrap;">${esc(est.summary)}</div>
+    </div>`:""}
+    <div class="card" style="margin-top:8px;">
+      <div class="section-title">Export & Share</div>
+      <button class="btn-secondary" onclick="emailProposal()" style="margin-bottom:8px;">📧 Email Proposal to Client</button>
+      <button class="btn-secondary" onclick="exportExcel()" style="margin-bottom:8px;">📊 Download Estimate (Excel)</button>
+      <button class="btn-secondary" onclick="generateProposalDocument()" style="margin-bottom:8px;">📄 Download Proposal Document</button>
+      <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
+      <div style="border-top:1px solid rgba(92,88,80,0.4);margin-top:12px;padding-top:12px;">
+        <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stone-light);margin-bottom:8px;">OneDrive</div>
+        <button id="od-connect-btn" class="btn-secondary" style="margin-bottom:8px;width:100%;font-size:13px;" onclick="odSignIn()">☁ Connect OneDrive</button>
+        <button class="btn-secondary" style="width:100%;background:rgba(45,106,79,0.15);border:1px solid rgba(45,106,79,0.5);color:#7ec8a4;font-size:13px;" onclick="syncVisitToOneDrive()" id="od-sync-btn">☁ Sync This Visit to OneDrive</button>
+        <p style="font-size:11px;color:var(--stone-light);margin-top:6px;line-height:1.5;">Saves visit JSON + proposal + estimate to OneDrive</p>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="goTo(4)">Next: Sign Agreement →</button>
+    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
+  </div>`;
+}
+
+function renderSign(){
+  const d = appData;
+  const dt = today();
+  return `<div class="page">
+    <div class="card-copper" style="text-align:center;">
+      <div style="font-size:11px;letter-spacing:5px;text-transform:uppercase;color:var(--copper);margin-bottom:6px;">Copper Mountain Builders</div>
+      <div style="font-size:20px;font-weight:bold;margin-bottom:4px;">Design-Build Agreement</div>
+      <div style="font-size:13px;color:var(--cream-dk);">${esc(d.clientName)} · ${esc(d.projectAddress)}, ${esc(d.projectCity)}, MT</div>
+      <div style="font-size:12px;color:var(--stone-light);margin-top:4px;">${dt}</div>
+    </div>
+
     <div class="card" style="border-color:rgba(184,115,51,0.4);">
-      <div class="section-title">Design-Build Agreement</div>
-      <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;margin-bottom:16px;max-height:400px;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
-        <p style="margin-bottom:12px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+      <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;max-height:500px;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
+        <p style="margin-bottom:12px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your project in the Flathead Valley. This Agreement explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">1. What We Will Do for You</p>
         <p style="margin-bottom:8px;">We will provide professional preconstruction design services using our proven <strong>5-Step Design-Build Program</strong> (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (construction) is handled under a separate full construction contract. We have the first right of refusal to build your project.</p>
@@ -2381,16 +2511,20 @@ function renderReview(){
         <p style="margin-bottom:8px;">· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Time is important — we will both work to keep your project moving.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit A — 5-Step Design-Build Program</p>
-        <p style="margin-bottom:4px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration. Your Assignment: Floor plan + material selection; we explain Buildertrend.</p>
-        <p style="margin-bottom:4px;"><strong>STEP 2 – Schematic Design:</strong> Early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans. Your Assignment: Interior selections (cabinetry, fixtures, trim, doors/windows).</p>
+        <p style="margin-bottom:4px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration.</p>
+        <p style="margin-bottom:4px;"><strong>STEP 2 – Schematic Design:</strong> Early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans.</p>
         <p style="margin-bottom:4px;"><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans signed off and sent to engineering.</p>
-        <p style="margin-bottom:4px;"><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs. All trade bids finalized.</p>
+        <p style="margin-bottom:4px;"><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs.</p>
         <p style="margin-bottom:8px;"><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit B — Insurance &amp; Montana Disclosures</p>
-        <p style="margin-bottom:8px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law. Montana Residential Construction Disclosures: We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract). Full insurance certificates and additional disclosures are available upon request.</p>
+        <p style="margin-bottom:8px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law. We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract). Full insurance certificates and additional disclosures are available upon request.</p>
       </div>
-      <div class="divider"></div>
+    </div>
+
+    <div class="card-copper">
+      <div class="section-title">Signatures</div>
+      <p style="font-size:12px;color:var(--cream-dk);margin-bottom:16px;line-height:1.6;">By signing below, both parties agree to the terms of this Design-Build Agreement. The non-refundable retainer of <strong style="color:var(--gold);">${fmt$(d.retainerAmount||0)}</strong> is due upon signing.</p>
       ${sigBlock("sig_client","clientSig","Client Signature")}
       <div class="row2">
         <div class="field"><label class="field-label">Print Name</label><input value="${esc(d.clientPrintName||d.clientName)}" oninput="appData.clientPrintName=this.value"/></div>
@@ -2400,21 +2534,10 @@ function renderReview(){
       ${sigBlock("sig_rep","repSig","Contractor Signature")}
       <div class="field"><label class="field-label">Rep Printed Name & Title</label><input value="${esc(d.repPrintName||d.repName)}" oninput="appData.repPrintName=this.value"/></div>
     </div>
-    <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print & Save Document</button>
-    <div class="card" style="margin-top:8px;">
-      <div class="section-title">Export & Share</div>
-      <button class="btn-secondary" onclick="emailProposal()" style="margin-bottom:8px;">📧 Email Proposal to Client</button>
-      <button class="btn-secondary" onclick="exportExcel()" style="margin-bottom:8px;">📊 Download Estimate for Buildertrend (CSV/Excel)</button>
-      <button class="btn-secondary" onclick="generateProposalDocument()" style="margin-bottom:8px;">📄 Download Proposal Document</button>
-      <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
-      <div style="border-top:1px solid rgba(92,88,80,0.4);margin-top:12px;padding-top:12px;">
-        <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stone-light);margin-bottom:8px;">OneDrive</div>
-        <button id="od-connect-btn" class="btn-secondary" style="margin-bottom:8px;width:100%;font-size:13px;" onclick="odSignIn()">☁ Connect OneDrive</button>
-        <button class="btn-secondary" style="width:100%;background:rgba(45,106,79,0.15);border:1px solid rgba(45,106,79,0.5);color:#7ec8a4;font-size:13px;" onclick="syncVisitToOneDrive()" id="od-sync-btn">☁ Sync This Visit to OneDrive</button>
-        <p style="font-size:11px;color:var(--stone-light);margin-top:6px;line-height:1.5;">Saves visit JSON + signed proposal to your OneDrive under CMB Site Visits/{Year}/</p>
-      </div>
-    </div>
-    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
+
+    <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print Signed Agreement</button>
+    <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract (PDF)</button>
+    <button class="btn-secondary" onclick="goTo(3)">← Back to Review</button>
   </div>`;
 }
 
@@ -2554,10 +2677,11 @@ function render(){
   else if(currentStep===1) html = renderScope();
   else if(currentStep===2) html = renderEstimate();
   else if(currentStep===3) html = renderReview();
+  else if(currentStep===4) html = renderSign();
   html += renderPrintDoc();
   app.innerHTML = html;
   updateHeader();
-  if(currentStep===3){
+  if(currentStep===4){
     setTimeout(()=>{ initSigPad("sig_client","clientSig"); initSigPad("sig_rep","repSig"); }, 50);
   }
   // Restore scroll position after render
