@@ -894,13 +894,13 @@ async function renderPdfToImages(file, maxPages=15){
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d");
       await page.render({canvasContext: ctx, viewport}).promise;
-      let result = canvas.toDataURL("image/jpeg", 0.55);
-      // Hard limit check — progressively shrink if needed
-      if(result.split(",")[1].length > 4_800_000){
-        result = await compressImage(result, 600, 0.45);
+      let result = canvas.toDataURL("image/jpeg", 0.50);
+      // Hard limit: 5MB raw = ~6M base64 chars
+      if(result.split(",")[1].length > 6_000_000){
+        result = await compressImage(result, 500, 0.4);
       }
-      if(result.split(",")[1].length > 4_800_000){
-        result = await compressImage(result, 400, 0.35);
+      if(result.split(",")[1].length > 6_000_000){
+        result = await compressImage(result, 350, 0.3);
       }
       pages.push(result);
       // Free canvas memory
@@ -927,13 +927,17 @@ function getAllPdfPageImages(maxTotal=15){
   return pages;
 }
 
-// Ensure image is under Claude's 5MB limit (base64 = ~1.37x raw bytes)
+// Ensure image is under Claude's 5MB raw limit
+// 5MB raw = 5,242,880 bytes. base64 is 4/3 of raw, so 5MB raw = ~6,990,507 base64 chars
+// Use 4.5MB raw (~6M base64 chars) as safe threshold
 async function ensureUnder5MB(dataUrl){
   let img = dataUrl;
-  const MAX_B64 = 4_800_000; // ~3.5MB raw, safe margin under 5MB
-  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 800, 0.5);
-  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 600, 0.4);
-  if(img.split(",")[1].length > MAX_B64) img = await compressImage(img, 400, 0.3);
+  const MAX_B64_LEN = 6_000_000; // ~4.5MB raw, safe under 5MB limit
+  const b64 = () => img.split(",")[1] || "";
+  if(b64().length > MAX_B64_LEN) { console.log("Image too large, compressing to 700px..."); img = await compressImage(img, 700, 0.45); }
+  if(b64().length > MAX_B64_LEN) { console.log("Still too large, compressing to 500px..."); img = await compressImage(img, 500, 0.35); }
+  if(b64().length > MAX_B64_LEN) { console.log("Still too large, compressing to 350px..."); img = await compressImage(img, 350, 0.25); }
+  if(b64().length > MAX_B64_LEN) { console.log("Still too large, last resort 200px..."); img = await compressImage(img, 200, 0.2); }
   return img;
 }
 
