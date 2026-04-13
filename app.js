@@ -1930,10 +1930,10 @@ Return ONLY this JSON:
     visionContent.push({type:"text", text:analysisPrompt});
     if(status) status.textContent = "Analyzing photos and scope…";
     let data;
-    const analyzeModels = ["claude-sonnet-4-20250514","claude-opus-4-20250514","claude-haiku-4-5-20251001"];
+    const analyzeModels = ["claude-opus-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
     for(let attempt = 0; attempt < analyzeModels.length; attempt++){
       const isFallback = attempt > 0;
-      if(isFallback && status) status.textContent = attempt===1 ? "Sonnet unavailable, trying Opus…" : "Using Haiku fallback…";
+      if(isFallback && status) status.textContent = attempt===1 ? "Opus unavailable, trying Sonnet…" : "Using Haiku fallback…";
       const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ model:analyzeModels[attempt], max_tokens:1500,
@@ -1981,9 +1981,9 @@ async function runGenerateEstimate(){
   const isCommercial = (z.type||"").toLowerCase().includes("commercial");
   const isDavisBacon = appData.davisBacon;
 
-  async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
+  async function workerCall(messages, system, maxTokens=1000, model="claude-opus-4-20250514"){
     // Fallback chain: Sonnet (best value) → Opus (most capable) → Haiku (always available)
-    const modelsToTry = [model, "claude-opus-4-20250514", "claude-haiku-4-5-20251001"];
+    const modelsToTry = [model, "claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"];
     const modelNames = {"claude-sonnet-4-20250514":"Sonnet","claude-opus-4-20250514":"Opus","claude-haiku-4-5-20251001":"Haiku"};
     for(let attempt = 0; attempt < modelsToTry.length; attempt++){
       const currentModel = modelsToTry[attempt];
@@ -2116,10 +2116,10 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
         visionContent.push({type:"text", text:`\n\n=== CONSTRUCTION DOCUMENTS — EXTRACTED TEXT ===\nThe following text was extracted from uploaded PDF blueprints and construction documents. This contains dimensions, specifications, schedules, notes, and all written content from the plans. Analyze this thoroughly for scope, quantities, and pricing impacts.\n\n${pdfText}`});
       }
 
-      const visionModels = ["claude-sonnet-4-20250514","claude-opus-4-20250514","claude-haiku-4-5-20251001"];
+      const visionModels = ["claude-opus-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
       for(let va = 0; va < visionModels.length; va++){
         const isFB = va > 0;
-        if(isFB) btn.textContent = va===1 ? "⏳ Step 1 — Trying Opus…" : "⏳ Step 1 — Using Haiku fallback…";
+        if(isFB) btn.textContent = va===1 ? "⏳ Step 1 — Trying Sonnet…" : "⏳ Step 1 — Using Haiku fallback…";
         const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({model:visionModels[va], max_tokens:3000, messages:[{role:"user",content:visionContent}]})
