@@ -36,6 +36,161 @@ const CMB_LABOR_RATES = {
   pm:        130
 };
 
+const UNIT_COST_DB = {
+  "Excavation, residential site":       { unit:"EA", low:8000,  high:20000 },
+  "Foundation, stem wall":              { unit:"SF", low:38,    high:48 },
+  "Foundation, slab on grade":          { unit:"SF", low:9,     high:12 },
+  "Foundation, full basement":          { unit:"SF", low:28,    high:38 },
+  "Concrete flatwork":                  { unit:"SF", low:8,     high:14 },
+  "Garage slab":                        { unit:"SF", low:10,    high:16 },
+  "Wall framing 2x6":                   { unit:"SF", low:5.50,  high:7.50 },
+  "Roof truss system":                  { unit:"SF", low:6.00,  high:9.00 },
+  "Sheathing":                          { unit:"SF", low:2.50,  high:3.50 },
+  "Standing seam metal roof":           { unit:"SF", low:24,    high:30 },
+  "Asphalt shingles":                   { unit:"SF", low:8,     high:12 },
+  "LP SmartSide siding":               { unit:"SF", low:12,    high:16 },
+  "Stone veneer":                       { unit:"SF", low:28,    high:45 },
+  "Stucco":                             { unit:"SF", low:14,    high:20 },
+  "Window, vinyl":                      { unit:"EA", low:900,   high:1400 },
+  "Window, wood-clad":                  { unit:"EA", low:1400,  high:2200 },
+  "Window, large fixed":                { unit:"EA", low:2000,  high:3500 },
+  "Exterior entry door":                { unit:"EA", low:2500,  high:5000 },
+  "Sliding glass door":                 { unit:"EA", low:3000,  high:6000 },
+  "Interior door, prehung":             { unit:"EA", low:400,   high:800 },
+  "Garage door":                        { unit:"EA", low:2000,  high:4500 },
+  "Spray foam insulation":              { unit:"SF", low:3.00,  high:4.00 },
+  "Batt insulation":                    { unit:"SF", low:1.50,  high:2.50 },
+  "Drywall hang/tape/texture":          { unit:"SF", low:2.80,  high:3.60 },
+  "Interior painting":                  { unit:"SF", low:2.50,  high:4.00 },
+  "Exterior painting":                  { unit:"SF", low:3.00,  high:5.00 },
+  "Trim/millwork installed":            { unit:"LF", low:18,    high:28 },
+  "Bathroom rough-in":                  { unit:"EA", low:4500,  high:7000 },
+  "Bathroom fixtures + finish":         { unit:"EA", low:8000,  high:18000 },
+  "Kitchen rough-in":                   { unit:"EA", low:3500,  high:5000 },
+  "Kitchen fixtures + finish":          { unit:"EA", low:3000,  high:6000 },
+  "Water heater, tankless":             { unit:"EA", low:3500,  high:5500 },
+  "Electrical rough-in":                { unit:"SF", low:4.00,  high:7.00 },
+  "Electrical fixtures/finish":         { unit:"SF", low:3.00,  high:5.00 },
+  "Panel upgrade 200A":                 { unit:"EA", low:3500,  high:6000 },
+  "Forced air HVAC system":             { unit:"EA", low:11000, high:21000 },
+  "Mini-split per head":                { unit:"EA", low:4500,  high:7500 },
+  "Radiant floor heat":                 { unit:"SF", low:12,    high:18 },
+  "Tile flooring":                      { unit:"SF", low:12,    high:22 },
+  "Hardwood flooring":                  { unit:"SF", low:9,     high:18 },
+  "LVP flooring":                       { unit:"SF", low:6,     high:11 },
+  "Carpet":                             { unit:"SF", low:4,     high:8 },
+  "Kitchen cabinets":                   { unit:"EA", low:24000, high:46000 },
+  "Bathroom vanity":                    { unit:"EA", low:2500,  high:6000 },
+  "Countertop, quartz":                 { unit:"SF", low:65,    high:95 },
+  "Countertop, granite":                { unit:"SF", low:55,    high:85 },
+  "Shower surround, tiled":             { unit:"EA", low:2500,  high:5000 },
+  "Backsplash":                         { unit:"EA", low:1500,  high:3000 },
+  "Selective demolition":               { unit:"SF", low:3,     high:6 },
+  "Full gut demolition":                { unit:"SF", low:8,     high:15 },
+  "Sprinkler system":                   { unit:"SF", low:4,     high:8 },
+  "Landscaping basic":                  { unit:"SF", low:1.50,  high:3.00 },
+  "Driveway, concrete":                 { unit:"SF", low:8,     high:14 }
+};
+
+function computeEstimateFromTakeoff(takeoffData, marginPercent){
+  const sections = (takeoffData.takeoff||[]).map(trade => {
+    const items = (trade.items||[]).map(item => ({
+      ...item,
+      lineTotalLow:  Math.round(item.qty * item.unitCostLow),
+      lineTotalHigh: Math.round(item.qty * item.unitCostHigh),
+      laborHoursTotal: Math.round((item.qty * (item.laborHoursPerUnit||0)) * 10) / 10
+    }));
+    return {
+      name: trade.trade,
+      csiCode: trade.csiCode || getBtInfo(trade.trade).labor,
+      items,
+      low:  items.reduce((s,i) => s + i.lineTotalLow, 0),
+      high: items.reduce((s,i) => s + i.lineTotalHigh, 0)
+    };
+  });
+
+  const subtotalLow  = sections.reduce((s,sec) => s + sec.low, 0);
+  const subtotalHigh = sections.reduce((s,sec) => s + sec.high, 0);
+
+  const months = takeoffData.constructionMonths || Math.max(3, Math.ceil(subtotalLow / 50000));
+  const gc = computeGC(subtotalLow, subtotalHigh, months);
+  const gcTotalLow  = gc.reduce((s,i) => s + i.lineTotalLow, 0);
+  const gcTotalHigh = gc.reduce((s,i) => s + i.lineTotalHigh, 0);
+
+  const pct = marginPercent || 20;
+  const preLow  = subtotalLow + gcTotalLow;
+  const preHigh = subtotalHigh + gcTotalHigh;
+
+  return {
+    sections,
+    generalConditions: { items: gc, low: gcTotalLow, high: gcTotalHigh, months },
+    subtotalLow, subtotalHigh,
+    gcLow: gcTotalLow, gcHigh: gcTotalHigh, gcMonths: months,
+    marginPercent: pct,
+    marginLow:  Math.round(preLow * pct / 100),
+    marginHigh: Math.round(preHigh * pct / 100),
+    totalLow:  preLow + Math.round(preLow * pct / 100),
+    totalHigh: preHigh + Math.round(preHigh * pct / 100),
+    scopeNotes: takeoffData.scopeNotes || ""
+  };
+}
+
+function computeGC(subtotalLow, subtotalHigh, months){
+  const template = [
+    { description:"Building permit",           qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.015), highPer: Math.round(subtotalHigh*0.02) },
+    { description:"Structural engineering",     qty:1,                         unit:"LS", lowPer:4000,  highPer:8000 },
+    { description:"Superintendent",             qty:months,                    unit:"MO", lowPer:3500,  highPer:4500 },
+    { description:"Dumpsters & waste removal",  qty:Math.ceil(months*1.5),     unit:"EA", lowPer:650,   highPer:850 },
+    { description:"Temporary facilities",       qty:months,                    unit:"MO", lowPer:800,   highPer:1200 },
+    { description:"Builder's risk insurance",   qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.008), highPer: Math.round(subtotalHigh*0.012) },
+    { description:"Final clean",                qty:1,                         unit:"LS", lowPer:2000,  highPer:4000 },
+    { description:"Contingency (5%)",           qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.05), highPer: Math.round(subtotalHigh*0.05) }
+  ];
+  return template.map(t => ({
+    description: t.description, qty: t.qty, unit: t.unit,
+    unitCostLow: t.lowPer, unitCostHigh: t.highPer,
+    lineTotalLow:  Math.round(t.qty * t.lowPer),
+    lineTotalHigh: Math.round(t.qty * t.highPer)
+  }));
+}
+
+function validateTakeoff(takeoff, projectType, sqft){
+  const warnings = [];
+  const required = REQUIRED_TRADES_BY_TYPE[projectType] || [];
+  const returned = (takeoff||[]).map(t => t.trade.toLowerCase());
+  for(const trade of required){
+    if(!returned.some(t => t.includes(trade.toLowerCase()) || trade.toLowerCase().includes(t))){
+      warnings.push(`Missing required trade: ${trade}`);
+    }
+  }
+  for(const trade of (takeoff||[])){
+    for(const item of (trade.items||[])){
+      if(item.qty <= 0) warnings.push(`${trade.trade}: ${item.description} has qty ${item.qty}`);
+      if(item.unitCostLow > item.unitCostHigh){
+        [item.unitCostLow, item.unitCostHigh] = [item.unitCostHigh, item.unitCostLow];
+      }
+    }
+  }
+  return warnings;
+}
+
+function sanityCheckPerSF(totalLow, totalHigh, projectType, sqft){
+  const bench = {
+    "New Residential Construction":           {low:250, high:375},
+    "Residential Remodel":                    {low:150, high:300},
+    "ADU / Guest House":                      {low:275, high:400},
+    "Commercial Remodel / Tenant Improvement":{low:150, high:350},
+    "New Commercial Construction":            {low:200, high:400},
+    "Addition":                               {low:200, high:350}
+  }[projectType];
+  if(!bench || !sqft) return [];
+  const warnings = [];
+  const perSfLow = totalLow / sqft;
+  if(perSfLow < bench.low * 0.8) warnings.push(`LOW ($${Math.round(perSfLow)}/SF) below typical ${projectType} range ($${bench.low}-$${bench.high}/SF)`);
+  if(totalHigh/sqft > bench.high * 1.3) warnings.push(`HIGH ($${Math.round(totalHigh/sqft)}/SF) above typical range`);
+  return warnings;
+}
+
 let currentStep = 0;
 let appData = {
   company: "Copper Mountain Builders",
@@ -1807,6 +1962,8 @@ async function runGenerateEstimate(){
   const wakeLock = await acquireWakeLock();
   const z = appData.zones[0];
   const projectSummary = `${z.type||"Project"} | ${z.sqft||"unknown"} SF | Notes: ${z.notes||"standard scope"}`;
+  const isCommercial = (z.type||"").toLowerCase().includes("commercial");
+  const isDavisBacon = appData.davisBacon;
 
   async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
     const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
@@ -1827,100 +1984,48 @@ async function runGenerateEstimate(){
     catch(err){
       let t = text.slice(s,e+1).replace(/,\s*([}\]])/g,"$1");
       try { return JSON.parse(t); }
-      catch(e2){ throw new Error(`${label} parse fail: "${text.slice(s,s+150)}"...`); }
+      catch(e2){ throw new Error(`${label} parse fail`); }
     }
   }
 
-  const isCommercial = (z.type||"").toLowerCase().includes("commercial");
-  const isDavisBacon = appData.davisBacon;
+  // Build the unit cost reference string for the system prompt
+  const unitCostRef = Object.entries(UNIT_COST_DB).map(([name, v]) =>
+    `  ${name}: ${v.unit} $${v.low} - $${v.high}`
+  ).join("\n");
 
-  function buildSystemPrompt(){
-    let sys = `You are the Chief Estimator at Copper Mountain Builders with extensive experience building residential and commercial projects in Northwest Montana. You know every code, every subcontractor, every material supplier, and every weather pattern that impacts construction in Flathead Valley.`;
+  // Build system prompt for takeoff
+  let SYSTEM = `You are the Chief Estimator at Copper Mountain Builders performing a quantity takeoff for a project in Flathead Valley, Montana.
 
-    if(isDavisBacon){
-      sys += `
+YOUR JOB: Identify EVERY line item of work required, assign realistic quantities, and pick unit cost ranges from the reference table below. You do NOT calculate totals. Return quantities and unit costs ONLY. The application handles all math.
 
-DAVIS-BACON PREVAILING WAGES APPLY TO THIS PROJECT.
-Use Department of Labor prevailing wage rates for Flathead County, MT instead of CMB rates.
-Common Montana prevailing wages (verify against current DOL determination):
-- Carpenter: $32-38/hr base + $18-22/hr fringe = $50-60/hr total
-- Electrician: $38-45/hr base + $20-25/hr fringe = $58-70/hr total
-- Plumber/Pipefitter: $36-42/hr base + $19-24/hr fringe = $55-66/hr total
-- Laborer: $22-28/hr base + $14-18/hr fringe = $36-46/hr total
-- Operating Engineer: $34-40/hr base + $18-22/hr fringe = $52-62/hr total
-- Ironworker: $36-42/hr base + $20-24/hr fringe = $56-66/hr total
-- Sheet Metal Worker: $35-41/hr base + $19-23/hr fringe = $54-64/hr total
-Include certified payroll administration costs (add 3-5% to total labor).
-Include performance and payment bonds (2-3% of total contract value).`;
-    } else {
-      sys += `
+${isDavisBacon ? `DAVIS-BACON PREVAILING WAGES APPLY. Use DOL prevailing wage rates for Flathead County instead of CMB rates. Add 3-5% for certified payroll. Include bonding costs.` : `CMB LABOR RATES: Carpenter $85/hr, Foreman $100/hr, PM $130/hr.`}
 
-CMB LABOR RATES (use for all labor calculations):
-- Carpenter / Field Labor: $85/hr
-- Project Foreman: $100/hr
-- Project Manager: $130/hr`;
-    }
+${isCommercial || isDavisBacon ? `COMMERCIAL/GOV PROJECT: Include performance/payment bonds (2-3% of contract) and certified payroll costs.` : ""}
 
-    if(isCommercial || isDavisBacon){
-      sys += `
+FLATHEAD VALLEY 2026 UNIT COST REFERENCE:
+${unitCostRef}
 
-COMMERCIAL/GOVERNMENT PROJECT REQUIREMENTS:
-- Include performance and payment bond costs (2-3% of contract value) in General Conditions
-- Include certified payroll administration costs if Davis-Bacon applies
-- Consider prevailing wage requirements for all subcontractor labor`;
-    }
-
-    sys += `
-
-Typical productivity (carpenter hours): Rough framing 0.06 hrs/SF | Roof framing 0.08 hrs/SF | Siding 0.07 hrs/SF | Roofing 0.05 hrs/SF | Insulation 0.03 hrs/SF | Drywall 0.04 hrs/SF | Tile 0.65 hrs/SF | Hardwood/LVP 0.05 hrs/SF | Painting 0.035 hrs/SF | Trim 0.20 hrs/LF | Window install 3 hrs each | Door install 2 hrs each | Plumbing fixture 4-6 hrs each | Cabinet install 1.5 hrs/cabinet
+Typical labor productivity: Framing 0.06 hrs/SF | Roof 0.08 hrs/SF | Siding 0.07 hrs/SF | Roofing 0.05 hrs/SF | Insulation 0.03 hrs/SF | Drywall 0.04 hrs/SF | Tile 0.65 hrs/SF | Hardwood/LVP 0.05 hrs/SF | Painting 0.035 hrs/SF | Trim 0.20 hrs/LF | Window 3 hrs/EA | Door 2 hrs/EA | Plumbing fixture 4-6 hrs/EA | Cabinet 1.5 hrs/EA
 
 MONTANA REALITIES:
 - 48-inch frost depth | 70 psf ground snow load | 180-day construction season
 - Standing seam standard (8-12 week lead time) | Windows 8-12 weeks | Permit review 4-6 weeks
 - Sub availability: framers 8-12 weeks out | WUI requirements add 10-15% to exterior
 
-2026 FLATHEAD VALLEY UNIT COSTS (MANDATORY — use these ranges, do NOT estimate below these):
-Foundation: slab $9-12/SF, stem wall $38-48/SF, full basement $28-38/SF
-Framing: walls $5.50-7.50/SF, trusses/roof $6-9/SF | Sheathing: $2.50-3.50/SF
-Roofing: standing seam metal $24-30/SF, asphalt $8-12/SF
-Exterior: LP SmartSide $12-16/SF, stone/cultured stone $28-45/SF, stucco $14-20/SF
-Windows: vinyl $900-1400 EA, wood-clad $1400-2200 EA, large fixed $2000-3500 EA
-Exterior doors: entry $2500-5000 EA, sliding glass $3000-6000 EA
-Interior doors: $400-800 EA installed
-Insulation: spray foam closed-cell $3-4/SF, batt $1.50-2.50/SF
-Drywall: hang/tape/texture $2.80-3.60/SF (ALWAYS include — every interior wall and ceiling)
-Painting: interior $2.50-4.00/SF walls+ceiling, exterior $3-5/SF (ALWAYS include)
-Trim/millwork: base/case/crown $18-28/LF installed
-Plumbing: rough-in $4500-7000 per bath, fixtures $8k-18k per bath, kitchen rough $3500-5000
-Electrical: rough-in $4-7/SF, fixtures/finish $3-5/SF, panel upgrade $3500-6000
-HVAC: forced air $11k-21k, mini-split $4500-7500/head, radiant floor $12-18/SF
-Flooring: tile $12-22/SF, hardwood $9-18/SF, LVP $6-11/SF, carpet $4-8/SF
-Cabinetry: kitchen $24k-46k, bathroom vanity $2500-6000 EA
-Countertops: quartz $65-95/SF, granite $55-85/SF, laminate $25-40/SF
-Tile: shower surround $2500-5000 EA, backsplash $1500-3000
-Demolition: interior selective $3-6/SF, full gut $8-15/SF
-Excavation: $3500-8000 per day, typical residential $8k-20k
-Concrete flatwork: $8-14/SF | Garage slab: $10-16/SF
-
-CRITICAL PRICING RULES:
-- These are 2026 Flathead Valley, Montana costs. This area is 15-25% MORE expensive than national averages.
-- ALWAYS use the MID-TO-HIGH end of these ranges for your LOW estimate. Use the HIGH end for your HIGH estimate.
-- Sub costs in Flathead Valley include mobilization premiums — subs drive 30+ minutes to most job sites.
-- Material delivery costs are higher due to distance from major distribution centers.
-- Do NOT underestimate. An estimate that is too low is worse than one that is too high. When in doubt, go higher.
-- Every interior space needs drywall AND paint. These are never optional on any project with walls.
-
-HARD PER-SF LIMITS (all-in including GC + 20% O&P):
-New construction: $250-375/SF | Remodel: $150-300/SF | ADU: $275-400/SF | Deck: $80-180/SF
-Kitchen remodel: $350-650/LF of cabinetry | Bathroom remodel: $25k-60k per bath
+RULES:
+1. Use the unit cost reference above. unitCostLow = mid-to-high of range. unitCostHigh = top of range.
+2. Every interior space needs DRYWALL and PAINTING. Never optional.
+3. Read ALL project notes as scope directives. "23 windows" means qty 23. "tile floors throughout" means tile for all floor SF.
+4. unitCostLow/High are ALL-IN installed costs (labor + material + sub markup).
+5. Do NOT compute any totals. No section totals. No grand totals. Quantities and unit costs ONLY.
+6. Every trade that applies must be included.
+7. laborRate: 85 for most items, 100 for foreman tasks, 130 for PM tasks.
 
 RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
-    return sys;
-  }
-  const SYSTEM = buildSystemPrompt();
 
   try {
-    btn.textContent = "⏳ Step 1 of 6 — Analyzing photos & blueprints…";
+    // ── CALL 1: Photo & Document Analysis (unchanged) ──
+    btn.textContent = "⏳ Step 1 of 4 — Analyzing photos & documents…";
     let siteNotes = "";
     const allDocs = getAllDocs();
     const photosToAnalyze = [];
@@ -1949,7 +2054,7 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
 
       // Add photos as vision images
       for(const {photo, label} of photosToAnalyze.slice(0,14)){
-        btn.textContent = `⏳ Step 1 of 6 — Processing ${label}…`;
+        btn.textContent = `⏳ Step 1 of 4 — Processing ${label}…`;
         const compressed = await compressImage(photo, 800, 0.7);
         visionContent.push({type:"text", text:`[${label}]:`});
         visionContent.push({type:"image", source:{type:"base64", media_type:"image/jpeg", data:compressed.split(",")[1]}});
@@ -1972,7 +2077,8 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
       return ans ? `Q: ${q.question}\nA: ${ans}` : null;
     }).filter(Boolean).join("\n");
 
-    btn.textContent = "⏳ Step 2 of 6 — Reviewing code compliance…";
+    // ── CALL 2: Code Compliance (unchanged) ──
+    btn.textContent = "⏳ Step 2 of 4 — Reviewing code compliance…";
     let complianceResult = null;
     try {
       complianceResult = await workerCall([{role:"user", content:
@@ -1992,137 +2098,91 @@ Write as a professional narrative report with ALL CAPS section headings. Plain p
       }], `You are the Chief Estimator at Copper Mountain Builders with deep experience in Montana building code and Flathead County permitting. Write clear professional narrative reports with ALL CAPS section headings. Never return JSON. Write like an experienced contractor.`, 1500);
     } catch(e){ console.warn("Compliance failed:", e.message); complianceResult = "Code compliance review unavailable. Recommend manual review."; }
 
-    btn.textContent = "⏳ Step 3 of 6 — Pricing project…";
+    // ── CALL 3: Quantity Takeoff (NEW — replaces old calls 3+4) ──
+    btn.textContent = "⏳ Step 3 of 4 — Building quantity takeoff…";
     const pdfTextForEstimate = getAllPdfText();
-    const zoneRaw = await workerCall([{role:"user", content:
-      `Price this Montana project with Flathead Valley expertise.
-PROJECT: ${projectSummary}
-${siteNotes?"Site Analysis:\n"+siteNotes+"\n":""}
-${complianceResult?"Code Notes:\n"+complianceResult+"\n":""}
-${appData.projectNotes?"Overall Notes: "+appData.projectNotes+"\n":""}
-${z.notes?"Project Notes: "+z.notes+"\n":""}
-${qaContext?"Q&A:\n"+qaContext+"\n":""}
-${pdfTextForEstimate?"CONSTRUCTION DOCUMENTS (extracted from blueprints):\n"+pdfTextForEstimate.slice(0,3000)+"\n":""}
-PRICING RULES:
-- LOW range = realistic best case using MID-TO-HIGH unit costs from the system prompt. NOT a lowball number.
-- HIGH range = what it will actually cost when selections are made and change orders happen. Use HIGH end of all ranges.
-- Include 20% O&P in all pricing.
-- Flathead Valley Montana costs 15-25% MORE than national averages. Do NOT use national pricing.
-- An estimate that is too low loses credibility with the client. When in doubt, estimate HIGHER.
-- Use the specific unit costs provided in the system prompt — they are based on actual 2026 Flathead Valley subcontractor bids.
-Return ONLY: {"zones":[{"name":"${z.type||"Project"}","low":0,"high":0,"notes":"2-3 sentence scope note"}]}`
-    }], SYSTEM, 1200);
-    const zoneResult = safeJSON(zoneRaw, "zones");
-
-    btn.textContent = "⏳ Step 4 of 6 — Breaking out trades…";
-    const sectionRaw = await workerCall([{role:"user", content:
-      `Break this Montana project into ALL applicable trade sections. Do NOT combine or omit trades — every distinct trade that applies MUST have its own section.
-
-PROJECT: ${projectSummary}
-ZONE TOTALS: ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.low,0))} LOW to ${fmt$(zoneResult.zones.reduce((a,z)=>a+z.high,0))} HIGH
-${siteNotes?"Site observations:\n"+siteNotes:""}
-${appData.projectNotes?"Overall project notes: "+appData.projectNotes:""}
-${z.notes?"Detailed project notes: "+z.notes:""}
-${qaContext?"Q&A:\n"+qaContext:""}
-
-CRITICAL: Read through ALL notes and Q&A answers above. Every item, material, quantity, or consideration mentioned MUST appear in a trade section. If notes mention windows — include a Windows section. If notes mention tile — include a Tile section. If notes mention drywall or paint — include those sections. Miss NOTHING from the notes.
-
-Match section totals to zone totals. Include 20% O&P.
-Assign the correct Buildertrend CSI division: 00=Procurement, 01=General Requirements, 02=Existing Conditions/Demo, 03=Concrete, 04=Masonry, 05=Metals, 06=Wood/Carpentry/Cabinets, 07=Thermal/Moisture/Roofing/Siding/Insulation, 08=Openings/Doors/Windows, 09=Finishes/Drywall/Flooring/Tile/Painting, 22=Plumbing, 23=HVAC, 26=Electrical, 31=Earthwork, 32=Exterior, 33=Utilities
-Return ONLY: {"sections":[{"name":"trade name","csiCode":"X.X01","low":0,"high":0}]}`
-    }], SYSTEM, 2000, "claude-sonnet-4-20250514");
-    let sectionResult = safeJSON(sectionRaw, "sections");
-    sectionResult.sections = (sectionResult.sections||[]).map(s => ({...s, csiCode: s.csiCode || getBtInfo(s.name).labor}));
-
-    // ── Trade validation: inject any missing required trades ──
     const requiredTrades = REQUIRED_TRADES_BY_TYPE[z.type] || REQUIRED_TRADES_BY_TYPE["Residential Remodel"] || [];
-    const existingNames = sectionResult.sections.map(s => s.name.toLowerCase());
-    const missingTrades = requiredTrades.filter(trade =>
-      !existingNames.some(name => name.includes(trade.toLowerCase()) || trade.toLowerCase().includes(name))
-    );
-    if(missingTrades.length > 0){
-      const totalBudget = zoneResult.zones.reduce((a,z) => a + z.low, 0);
-      for(const trade of missingTrades){
-        const estCost = Math.round(totalBudget * 0.03);
-        sectionResult.sections.push({
-          name: trade, csiCode: getBtInfo(trade).labor,
-          low: estCost, high: Math.round(estCost * 1.3),
-          _injected: true // flag for review
-        });
-      }
-      console.log("Injected missing trades:", missingTrades);
-    }
 
-    btn.textContent = "⏳ Step 5 of 6 — Writing scope + GC costs…";
-    const subtotalLow  = zoneResult.zones.reduce((a,z)=>a+(z.low||0), 0);
-    const subtotalHigh = zoneResult.zones.reduce((a,z)=>a+(z.high||0), 0);
-    const gcRaw = await workerCall([{role:"user", content:
-      `Calculate general conditions AND write the Scope of Work narrative for this Montana design-build proposal.
-BASE CONSTRUCTION: ${fmt$(subtotalLow)} LOW / ${fmt$(subtotalHigh)} HIGH
+    const takeoffRaw = await workerCall([{role:"user", content:
+      `Perform a complete quantity takeoff for this project.
+
 PROJECT: ${projectSummary}
-${siteNotes?"Site Analysis: "+siteNotes.slice(0,300):""}
-${complianceResult?"Code Notes: "+complianceResult.slice(0,300):""}
-${qaContext?"Q&A:\n"+qaContext:""}
+${siteNotes ? "SITE ANALYSIS:\n"+siteNotes : ""}
+${complianceResult ? "CODE NOTES:\n"+complianceResult : ""}
+${appData.projectNotes ? "OVERALL NOTES: "+appData.projectNotes : ""}
+${z.notes ? "PROJECT NOTES: "+z.notes : ""}
+${qaContext ? "CLIENT Q&A:\n"+qaContext : ""}
+${pdfTextForEstimate ? "CONSTRUCTION DOCUMENTS:\n"+pdfTextForEstimate.slice(0,4000) : ""}
 
-PART 1 — GENERAL CONDITIONS:
-Duration: 1 month per $50k (minimum 3 months). Include permits, engineering, superintendent, temp facilities, dumpsters, builder's risk, 5% contingency. Realistic Flathead Valley costs.
+REQUIRED TRADES for ${z.type}: ${requiredTrades.join(", ")}
 
-PART 2 — SCOPE OF WORK NARRATIVE (400-600 words):
-This will be handed directly to the client. Write so a homeowner with no construction background can understand exactly what they're getting. Use "we" for CMB. Five sections with ALL CAPS headers:
-
-YOUR PROJECT — Plain description of what type of work this is and what we saw at the site. Describe the project in terms the client used. Reference specific rooms, features, and conditions from the notes/photos.
-
-WHAT'S INCLUDED — Clear list of what CMB will do. Use simple terms: "Install new windows throughout" not "procure and install fenestration assemblies." Include quantities from notes where available. Each item should start with a verb (Install, Remove, Build, Replace, etc).
-
-WHAT'S NOT INCLUDED — Be specific about exclusions so there are no surprises. Common items: landscaping, furniture, appliances (unless noted), permits beyond building permit, engineering beyond structural, hazmat abatement (unless noted). Also note what decisions the client still needs to make (flooring selections, fixture choices, etc).
-
-BUDGET CONTEXT — In 2-3 sentences, explain what drives the cost range. Reference Montana-specific factors the client should understand: material lead times, seasonal construction windows, Flathead Valley labor market. Don't apologize for costs, just explain them plainly.
-
-GETTING STARTED — What happens next: sign the design-build agreement, pay the retainer, schedule the first design meeting. Keep it to 2-3 sentences.
-
-TONE: Write like you're talking to the client across their kitchen table. Direct, clear, no jargon. No hollow adjectives (stunning/transformative/seamlessly). No expertise claims. No age references about the house or the client.
-
-PART 3 — COMPLIANCE NOTES (internal rep use only): Flag code issues or permit risks.
+For each trade, list every specific line item with exact quantity, unit, and unit cost range from your reference table. Use ${z.sqft||"the noted"} SF as the basis for area-based quantities. Count specific items from notes/photos/documents.
 
 Return ONLY this JSON:
-{"gcLow":0,"gcHigh":0,"gcMonths":3,"summary":"scope of work narrative here","complianceNotes":["note1","note2"]}`
-    }], SYSTEM, 2500);
-    const gcResult = safeJSON(gcRaw, "gc-totals");
+{"takeoff":[{"trade":"Trade Name","csiCode":"XX","items":[{"description":"item","qty":0,"unit":"SF","unitCostLow":0,"unitCostHigh":0,"laborHoursPerUnit":0,"laborRate":85,"notes":"assumption"}]}],"constructionMonths":0,"scopeNotes":"summary"}`
+    }], SYSTEM, 4000);
 
-    btn.textContent = "⏳ Step 6 of 6 — Building schedule…";
-    let scheduleResult = null;
-    try {
-      const schedRaw = await workerCall([{role:"user", content:
-        `Build a realistic construction schedule for this Montana design-build project.
+    const takeoffResult = safeJSON(takeoffRaw, "takeoff");
+
+    // Validate
+    const warnings = validateTakeoff(takeoffResult.takeoff, z.type, z.sqft);
+    if(warnings.length) console.warn("Takeoff warnings:", warnings);
+
+    // APP DOES ALL THE MATH
+    const computed = computeEstimateFromTakeoff(takeoffResult, appData.marginPercent || 20);
+
+    // Sanity check
+    if(z.sqft){
+      const sfWarnings = sanityCheckPerSF(computed.totalLow, computed.totalHigh, z.type, Number(z.sqft));
+      if(sfWarnings.length) console.warn("Per-SF warnings:", sfWarnings);
+    }
+
+    // ── CALL 4: SOW Narrative + Schedule (combined — replaces old calls 5+6) ──
+    btn.textContent = "⏳ Step 4 of 4 — Writing scope & schedule…";
+
+    const sowRaw = await workerCall([{role:"user", content:
+      `Write the Scope of Work narrative AND construction schedule for this project.
+
 PROJECT: ${projectSummary}
-Total budget: ${fmt$(subtotalLow + (gcResult.gcLow||0))} – ${fmt$(subtotalHigh + (gcResult.gcHigh||0))}
-Construction duration: ${gcResult.gcMonths||3} months
-${qaContext?"Q&A:\n"+qaContext:""}
-${siteNotes?"Site observations: "+siteNotes.slice(0,300):""}
+COMPUTED BUDGET: ${fmt$(computed.totalLow)} LOW — ${fmt$(computed.totalHigh)} HIGH
+CONSTRUCTION DURATION: ${computed.gcMonths} months
+TRADES INCLUDED: ${computed.sections.map(s => s.name + " (" + fmt$(s.low) + "-" + fmt$(s.high) + ")").join(", ")}
+${siteNotes ? "SITE ANALYSIS: "+siteNotes.slice(0,500) : ""}
+${appData.projectNotes ? "NOTES: "+appData.projectNotes : ""}
+${z.notes ? "PROJECT NOTES: "+z.notes : ""}
+${qaContext ? "Q&A:\n"+qaContext : ""}
 
-Include DESIGN PHASE (Steps 1-4, 10-14 weeks total) and CONSTRUCTION PHASE with:
-- Seasonal constraints (foundation May-Oct, dried-in before Sept 15)
-- Material lead times (windows 8-12wk, standing seam 10-14wk, cabinets 6-10wk)
-- Sub booking deadlines (framers 8-12wk, finish carpenters 6-8wk)
-- Sequencing dependencies and inspection hold points
-- Client decision deadlines and weather window constraints
+PART 1 — SCOPE OF WORK (400-600 words for client):
+Write so a homeowner with no construction background understands exactly what they're getting. Use "we" for CMB. Five sections with ALL CAPS headers:
+YOUR PROJECT — what we saw, what type of work this is
+WHAT'S INCLUDED — clear list, simple terms, verbs first (Install, Remove, Build, Replace)
+WHAT'S NOT INCLUDED — specific exclusions, decisions client still needs to make
+BUDGET CONTEXT — 2-3 sentences on what drives the cost range, Montana factors
+GETTING STARTED — next steps (sign agreement, pay retainer, first meeting)
+TONE: Kitchen-table conversation. No jargon, no hollow adjectives.
 
-Return ONLY: {"designPhase":"10-14 weeks","constructionPhase":"X-Y months","startToFinish":"total duration","milestones":[{"phase":"Week 1-2: Initial Consultation","duration":"2 weeks","notes":"2 client meetings","type":"design"}]}`
-      }], SYSTEM, 2000);
-      scheduleResult = safeJSON(schedRaw, "schedule");
-    } catch(e){ console.warn("Schedule failed:", e.message); scheduleResult = {startToFinish:`${gcResult.gcMonths||3} months construction + 10-14 weeks design`, milestones:[]}; }
+PART 2 — SCHEDULE:
+Include design phase (10-14 weeks) + construction phase with Montana seasonal constraints.
 
-    const totalLow  = subtotalLow  + (gcResult.gcLow||0);
-    const totalHigh = subtotalHigh + (gcResult.gcHigh||0);
+PART 3 — COMPLIANCE NOTES (internal, rep only): Flag code issues.
+
+Return ONLY this JSON:
+{"summary":"SOW narrative","schedule":{"designPhase":"10-14 weeks","constructionPhase":"X months","startToFinish":"total","milestones":[{"phase":"Phase name","duration":"X weeks","notes":"details"}]},"complianceNotes":["note1"]}`
+    }], SYSTEM.replace("RESPOND ONLY WITH VALID JSON","Return ONLY the requested JSON."), 3000);
+
+    const sowResult = safeJSON(sowRaw, "sow");
+
+    // Assemble final estimate
     const estimate = {
-      zones: zoneResult.zones, sections: sectionResult.sections,
-      gcLow: gcResult.gcLow||0, gcHigh: gcResult.gcHigh||0, gcMonths: gcResult.gcMonths||3,
-      subtotalLow, subtotalHigh, overheadProfitLow: 0, overheadProfitHigh: 0,
-      totalLow, totalHigh,
-      summary: gcResult.summary||"", complianceNotes: gcResult.complianceNotes||[],
-      complianceAnalysis: complianceResult||"", siteAnalysis: siteNotes||"",
-      schedule: scheduleResult
+      ...computed,
+      zones: [{name: z.type||"Project", low: computed.subtotalLow, high: computed.subtotalHigh, notes: takeoffResult.scopeNotes}],
+      summary: sowResult.summary || "",
+      complianceNotes: sowResult.complianceNotes || [],
+      complianceAnalysis: complianceResult || "",
+      siteAnalysis: siteNotes || "",
+      schedule: sowResult.schedule || null
     };
+
     appData.estimate = estimate;
     const suggested = calcRetainerSuggestion(estimate.totalLow);
     if(!appData.retainerAmount) appData.retainerAmount = suggested;
@@ -2132,50 +2192,6 @@ Return ONLY: {"designPhase":"10-14 weeks","constructionPhase":"X-Y months","star
     releaseWakeLock(wakeLock);
     err.textContent = "Error: " + e.message; err.classList.remove("hidden");
     btn.disabled = false; btn.textContent = "✦ Generate AI Estimate";
-  }
-}
-
-async function expandSection(sectionIdx){
-  const btn = document.getElementById("expand-btn-"+sectionIdx);
-  const container = document.getElementById("expand-"+sectionIdx);
-  if(!btn || !container) return;
-  btn.disabled = true; btn.textContent = "⏳ Loading…";
-  const section = appData.estimate.sections[sectionIdx];
-  const z = appData.zones[0];
-  const bt = getBtInfo(section.name);
-  const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
-Project: ${z.type||"Project"} ${z.sqft||""}SF. Section total: $${section.low.toLocaleString()}.
-BT Cost Code: ${bt.labor}
-Use CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr.
-For each item: hours=total labor hours for that qty, laborRate=85/100/130, laborRateType=Carpenter/Foreman/PM, laborUnit=hours/qty*rate, materialUnit=material cost/unit, unitCost=laborUnit+materialUnit, laborTotal=hours*rate, materialTotal=qty*materialUnit, total=laborTotal+materialTotal. Include 20% O&P.
-Return ONLY JSON array (4-6 items):
-[{"description":"item","unit":"SF","qty":1,"hours":0,"laborRate":85,"laborRateType":"Carpenter","laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
-  try {
-    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:1500,
-        system:"You are a construction estimator in Flathead Valley Montana. CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Return ONLY valid JSON array. No markdown.",
-        messages:[{role:"user", content:prompt}] })
-    });
-    if(!res.ok) throw new Error("Server error "+res.status);
-    const data = await res.json();
-    let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
-    const start = raw.indexOf("["), end = raw.lastIndexOf("]");
-    if(start===-1||end===-1) throw new Error("No array returned");
-    const items = JSON.parse(raw.slice(start, end+1));
-    appData.estimate.sections[sectionIdx].lineItems = items;
-    container.innerHTML = items.map(item=>`
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
-        <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
-        <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;text-align:right;">
-          ${item.qty} ${esc(item.unit||"LS")} | ${item.hours||0}hrs @ $${item.laborRate||85}/hr (${esc(item.laborRateType||"Carpenter")})<br>
-          Mat: $${Number(item.materialUnit||0).toLocaleString()}/${esc(item.unit||"LS")} = <strong style="color:var(--cream);">$${Number(item.total||0).toLocaleString()}</strong>
-        </span>
-      </div>`).join("");
-    btn.textContent = "↻ Refresh"; btn.disabled = false;
-  } catch(e){
-    container.innerHTML = `<p style="color:var(--danger);font-size:12px;">Error: ${e.message}</p>`;
-    btn.textContent = "↻ Retry"; btn.disabled = false;
   }
 }
 
@@ -2343,6 +2359,19 @@ function renderEstimate(){
           <p style="font-size:12px;color:var(--stone-light);">${esc(z.notes)}</p>
         </div>
       `).join("")}
+      ${est.marginPercent?`
+      <div class="estimate-row">
+        <span style="color:var(--stone-light);">Subtotal (trades)</span>
+        <span style="color:var(--stone-light);">${fmt$(est.subtotalLow)} — ${fmt$(est.subtotalHigh)}</span>
+      </div>
+      <div class="estimate-row">
+        <span style="color:var(--stone-light);">GC / General Conditions</span>
+        <span style="color:var(--stone-light);">${fmt$(est.gcLow)} — ${fmt$(est.gcHigh)}</span>
+      </div>
+      <div class="estimate-row">
+        <span style="color:var(--stone-light);">Margin (${est.marginPercent}%)</span>
+        <span style="color:var(--stone-light);">${fmt$(est.marginLow)} — ${fmt$(est.marginHigh)}</span>
+      </div>`:""}
       <div class="estimate-row" style="border:none;">
         <span style="font-weight:bold;">TOTAL</span>
         <span><span id="tot-low" style="color:var(--gold);font-weight:bold;">${fmt$(est.totalLow)}</span> — <span id="tot-high" style="color:var(--gold);font-weight:bold;">${fmt$(est.totalHigh)}</span></span>
@@ -2360,22 +2389,17 @@ function renderEstimate(){
             </div>
             <span style="font-size:13px;color:var(--gold);font-weight:bold;">${fmt$(s.low)} – ${fmt$(s.high)}</span>
           </div>
-          <div id="expand-${si}" style="padding-left:8px;margin-top:4px;">
-            ${s.lineItems&&s.lineItems.length?s.lineItems.map(item=>`
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
-                <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}</span>
-                <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;">
-          ${item.qty} ${esc(item.unit||"LS")} &nbsp;|&nbsp;
-          ${item.hours?`${item.hours}hrs @ $${item.laborRate||85}/hr (${esc(item.laborRateType||"Carpenter")})`:""}
-          ${item.materialUnit?" | Mat: $"+Number(item.materialUnit).toLocaleString()+"/"+esc(item.unit||"LS"):""}
-          &nbsp;= <strong style="color:var(--cream);">$${Number(item.total||item.totalLow||0).toLocaleString()}</strong>
-        </span>
+          <div style="padding-left:8px;margin-top:4px;">
+            ${(s.items||[]).map(item=>`
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
+                <span style="font-size:12px;color:var(--cream-dk);flex:1;padding-right:8px;">${esc(item.description)}${item.notes?' <span style="color:var(--stone-light);font-size:10px;">('+esc(item.notes)+')</span>':''}</span>
+                <span style="font-size:11px;color:var(--stone-light);white-space:nowrap;text-align:right;">
+                  ${item.qty} ${esc(item.unit||"LS")} @ ${fmt$(item.unitCostLow)}-${fmt$(item.unitCostHigh)}<br>
+                  <strong style="color:var(--cream);">${fmt$(item.lineTotalLow)} – ${fmt$(item.lineTotalHigh)}</strong>
+                </span>
               </div>
-            `).join(""):""}
+            `).join("")}
           </div>
-          <button id="expand-btn-${si}" class="btn-small" style="margin-top:6px;font-size:11px;background:transparent;border:1px solid var(--stone-light);color:var(--stone-light);" onclick="expandSection(${si})">
-            ${s.lineItems&&s.lineItems.length?"↻ Refresh line items":"＋ Expand line items"}
-          </button>
         </div>
       `).join("")}
     </div>`:""}
@@ -2384,8 +2408,8 @@ function renderEstimate(){
       <div class="section-title">General Conditions (${est.gcMonths||est.generalConditions?.months||1} month${(est.gcMonths||est.generalConditions?.months||1)>1?"s":""})</div>
       ${(est.generalConditions?.items||[]).map(item=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(92,88,80,0.15);">
-          <span style="font-size:12px;color:var(--cream-dk);">${esc(item.name)}</span>
-          <span style="font-size:12px;color:var(--cream);">${fmt$(item.low)} – ${fmt$(item.high)}</span>
+          <span style="font-size:12px;color:var(--cream-dk);">${esc(item.description)}</span>
+          <span style="font-size:12px;color:var(--cream);">${item.qty} ${esc(item.unit)} @ ${fmt$(item.unitCostLow)}-${fmt$(item.unitCostHigh)} = ${fmt$(item.lineTotalLow)} – ${fmt$(item.lineTotalHigh)}</span>
         </div>
       `).join("")}
       <div style="display:flex;justify-content:space-between;padding:8px 0;">
