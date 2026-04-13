@@ -1930,18 +1930,21 @@ Return ONLY this JSON:
     visionContent.push({type:"text", text:analysisPrompt});
     if(status) status.textContent = "Analyzing photos and scope…";
     let data;
-    for(let attempt = 0; attempt < 4; attempt++){
+    const analyzeModels = ["claude-sonnet-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
+    for(let attempt = 0; attempt < analyzeModels.length; attempt++){
+      const isFallback = attempt === analyzeModels.length - 1;
+      if(isFallback && status) status.textContent = "Sonnet unavailable, using Haiku fallback…";
       const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1500,
+        body: JSON.stringify({ model:analyzeModels[attempt], max_tokens:1500,
           messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}] })
       });
       data = await res.json();
       if(data.error){
         const errStr = JSON.stringify(data.error);
-        if((errStr.includes("overloaded") || res.status === 529 || res.status === 503) && attempt < 3){
-          const wait = (attempt + 1) * 5000;
-          if(status) status.textContent = `Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/4)`;
+        if((errStr.includes("overloaded") || res.status === 529 || res.status === 503) && attempt < analyzeModels.length - 1){
+          const wait = (attempt + 1) * 3000;
+          if(status) status.textContent = `Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${analyzeModels.length})`;
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
@@ -1979,28 +1982,32 @@ async function runGenerateEstimate(){
   const isDavisBacon = appData.davisBacon;
 
   async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
-    const maxRetries = 4;
-    for(let attempt = 0; attempt < maxRetries; attempt++){
+    const FALLBACK = "claude-haiku-4-5-20251001";
+    const modelsToTry = [model, model, FALLBACK]; // 2 tries on primary, then fallback
+    for(let attempt = 0; attempt < modelsToTry.length; attempt++){
+      const currentModel = modelsToTry[attempt];
+      const isFallback = currentModel === FALLBACK && model !== FALLBACK;
       try {
+        if(isFallback && btn) btn.textContent = `⏳ Sonnet unavailable, using Haiku fallback…`;
         const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ model, max_tokens:maxTokens, temperature:0.3, system, messages })
+          body: JSON.stringify({ model:currentModel, max_tokens:maxTokens, temperature:0.3, system, messages })
         });
         const data = await res.json();
         if(data.error){
           const errStr = JSON.stringify(data.error);
-          if((errStr.includes("overloaded") || errStr.includes("529") || res.status === 529) && attempt < maxRetries - 1){
-            const wait = (attempt + 1) * 5000;
-            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+          if((errStr.includes("overloaded") || res.status === 529 || res.status === 503) && attempt < modelsToTry.length - 1){
+            const wait = (attempt + 1) * 3000;
+            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${modelsToTry.length})`;
             await new Promise(r => setTimeout(r, wait));
             continue;
           }
           throw new Error("Claude error: " + errStr);
         }
         if(!res.ok){
-          if((res.status === 529 || res.status === 503) && attempt < maxRetries - 1){
-            const wait = (attempt + 1) * 5000;
-            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+          if((res.status === 529 || res.status === 503) && attempt < modelsToTry.length - 1){
+            const wait = (attempt + 1) * 3000;
+            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${modelsToTry.length})`;
             await new Promise(r => setTimeout(r, wait));
             continue;
           }
@@ -2009,9 +2016,9 @@ async function runGenerateEstimate(){
         if(!data.content?.[0]?.text) throw new Error("No content in response");
         return data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
       } catch(err) {
-        if(err.message.includes("overloaded") && attempt < maxRetries - 1){
-          const wait = (attempt + 1) * 5000;
-          if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+        if(err.message.includes("overloaded") && attempt < modelsToTry.length - 1){
+          const wait = (attempt + 1) * 3000;
+          if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${modelsToTry.length})`;
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
@@ -2108,11 +2115,22 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
         visionContent.push({type:"text", text:`\n\n=== CONSTRUCTION DOCUMENTS — EXTRACTED TEXT ===\nThe following text was extracted from uploaded PDF blueprints and construction documents. This contains dimensions, specifications, schedules, notes, and all written content from the plans. Analyze this thoroughly for scope, quantities, and pricing impacts.\n\n${pdfText}`});
       }
 
-      const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:3000, messages:[{role:"user",content:visionContent}]})
-      });
-      if(visionRes.ok){ const vd = await visionRes.json(); if(vd.content?.[0]?.text) siteNotes = vd.content[0].text; }
+      const visionModels = ["claude-sonnet-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
+      for(let va = 0; va < visionModels.length; va++){
+        const isFB = va === visionModels.length - 1;
+        if(isFB) btn.textContent = "⏳ Step 1 — Sonnet unavailable, using Haiku…";
+        const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({model:visionModels[va], max_tokens:3000, messages:[{role:"user",content:visionContent}]})
+        });
+        const vd = await visionRes.json();
+        if(vd.error && (JSON.stringify(vd.error).includes("overloaded") || visionRes.status === 529) && va < visionModels.length - 1){
+          const w = (va+1)*3000; btn.textContent = `⏳ Server busy, retrying... (${va+2}/${visionModels.length})`;
+          await new Promise(r => setTimeout(r, w)); continue;
+        }
+        if(vd.content?.[0]?.text) siteNotes = vd.content[0].text;
+        break;
+      }
     }
 
     const qaContext = (appData.clarifyingQuestions||[]).map(q => {
