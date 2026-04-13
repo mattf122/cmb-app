@@ -525,83 +525,104 @@ www.coppermountainbuilders.com
 function generateSignedContractPdf(){
   const d = appData;
   const dt = today();
+  const clientName = esc(d.clientName||"");
+  const clientAddr = `${esc(d.clientAddress||"")}, ${esc(d.clientCity||"")}, Montana ${esc(d.clientZip||"")}`;
+  const projectAddr = `${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, Montana ${esc(d.clientZip||"")}`;
+  const retainer = fmt$(d.retainerAmount||0);
   const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_Design-Build_Agreement_" + new Date().toLocaleDateString().replace(/\//g,"-") + ".doc";
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><style>
     @page{size:8.5in 11in;margin:1in} body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;color:#2C2A27;margin:0;padding:20px}
     h1{font-size:20pt;font-weight:bold;color:#B87333;text-align:center;margin-bottom:5px}
     h2{font-size:11pt;font-weight:bold;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin:20px 0 8px 0;border-bottom:1px solid #e0d0b0;padding-bottom:4px}
-    p{margin:8px 0;text-align:justify}
+    p{margin:6px 0} .indent{padding-left:20px}
     .header{text-align:center;border-bottom:3px solid #B87333;padding-bottom:15px;margin-bottom:20px}
-    .subtitle{font-size:14pt;color:#333;text-align:center;margin-bottom:20px}
-    .info{font-size:11pt;text-align:center;margin:4px 0;color:#555}
-    .sig-section{margin-top:40px;display:flex;gap:40px}
-    .sig-block{flex:1}
-    .sig-line{border-bottom:1px solid #333;height:50px;margin-bottom:4px}
-    .sig-label{font-size:10pt;color:#888}
-    .sig-img{height:50px;object-fit:contain;border-bottom:1px solid #333}
     .page-break{page-break-before:always}
   </style></head><body>
     <div class="header">
       <h1>COPPER MOUNTAIN BUILDERS</h1>
-      <div class="subtitle">Design-Build Agreement</div>
-      <div class="info"><strong>Client:</strong> ${esc(d.clientName)}</div>
-      <div class="info"><strong>Project:</strong> ${esc(d.projectAddress)}, ${esc(d.projectCity)}, MT</div>
-      <div class="info"><strong>Date:</strong> ${dt}</div>
-      <div class="info"><strong>Prepared by:</strong> ${esc(d.repName)}</div>
+      <p style="font-size:14pt;color:#333;text-align:center;">Design-Build Agreement</p>
+      <p style="font-size:11pt;text-align:center;color:#555;">${dt}</p>
     </div>
 
-    <p>Thank you for choosing <strong>Copper Mountain Builders</strong> for your project in the Flathead Valley. This Agreement explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+    <p><strong>Welcome</strong></p>
+    <p>Thank you for choosing Copper Mountain Builders for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+    <p>We designed this document to be easy to read while still giving you the protection and peace of mind you deserve — like a good insurance policy for your design investment.</p>
+
+    <h2>Parties to This Agreement</h2>
+    <p><strong>You (the Client):</strong><br/>${clientName}<br/>${clientAddr}</p>
+    <p><strong>We (the Contractor):</strong><br/>Copper Mountain Builders<br/>PO Box 2471, Kalispell, MT 59903</p>
+    <p><strong>Project Address:</strong> ${projectAddr}</p>
 
     <h2>1. What We Will Do for You</h2>
-    <p>We will provide professional preconstruction design services using our proven 5-Step Design-Build Program (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (construction) is handled under a separate full construction contract. We have the first right of refusal to build your project.</p>
+    <p>We will provide professional preconstruction design services using our proven 5-Step Design-Build Program (see Exhibit A for full details). These services cover everything from initial planning through final design documents and bidding preparation.</p>
+    <p><strong>Steps Covered in This Agreement:</strong></p>
+    <p class="indent">· Step 1 – Initial Consultation + Vision Planning<br/>· Step 2 – Schematic Design<br/>· Step 3 – Design Development<br/>· Step 4 – Project Development</p>
+    <p>Step 5 (actual construction and post-build support) is handled under a separate full construction contract that we will present when the design is complete.</p>
+    <p>We include two client meetings per phase in Steps 1–3 and all coordination of surveys, engineering, renderings, and bidding packages.</p>
+    <p><strong>Your Role (Client Assignments):</strong> In each step you will complete simple assignments such as selecting materials, approving floor plans, and interior choices (detailed in Exhibit A). Timely completion helps keep your project on schedule.</p>
+    <p>This Agreement is your retainer for professional design services. When Steps 1–4 are complete, we will present the full construction contract and we have the first right of refusal to build your project.</p>
 
     <h2>2. Your Investment (Compensation)</h2>
-    <p>Hourly rates include a 20% markup for overhead and management:</p>
-    <p>· Principal / General Management: <strong>$250.00/hr</strong><br/>· Architectural Design Services: <strong>$250.00/hr</strong><br/>· Consultants / Specialty Engineering: <strong>$250.00/hr</strong><br/>· Interior/Exterior Designer: <strong>$150.00/hr</strong></p>
-    <p><strong>Initial Non-Refundable Retainer: ${fmt$(d.retainerAmount||0)}</strong> — payable when you sign and applied to your first invoice(s). Invoices are sent monthly or at phase milestones. Payment is due within 10 calendar days. Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law). Final design documents are released only after all outstanding amounts are paid in full.</p>
+    <p>We charge a clear hourly rate that includes a 20% markup for overhead and management:</p>
+    <p class="indent">· Principal / General Management: <strong>$250.00 per hour</strong><br/>· Architectural Design Services: <strong>$250.00 per hour</strong><br/>· Consultants / Specialty Engineering: <strong>$250.00 per hour</strong><br/>· Interior/Exterior Designer: <strong>$150.00 per hour</strong></p>
+    <p><strong>Initial Non-Refundable Retainer: ${retainer}</strong> — payable when you sign and applied to your first invoice(s).</p>
+    <p><strong>Payment Terms:</strong></p>
+    <p class="indent">· Invoices are sent monthly or at phase milestones.<br/>· Payment is due within 10 calendar days.<br/>· Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law).</p>
+    <p>Final design documents are released only after all outstanding amounts are paid in full.</p>
 
     <h2>3. How Long This Lasts &amp; What Happens if We Stop Early</h2>
-    <p>This Agreement begins on the date signed and continues until we complete Steps 1–4, or until one of us ends it with 14 days written notice. If the Agreement ends early: you pay for all work completed and expenses incurred; you pay a Termination Fee of 10% of the estimated construction cost (minimum $5,000); all design materials must be returned or destroyed. If you later use our designs with another contractor without written permission and full payment, you owe a Design Licensing Fee equal to 200% of total design fees paid or estimated.</p>
+    <p>This Agreement begins on the date above and continues until we complete Steps 1–4, or until one of us ends it with 14 days written notice.</p>
+    <p>If the Agreement ends early:</p>
+    <p class="indent">· You pay for all work we have completed and any expenses incurred up to that date.<br/>· You pay a Termination Fee of 10% of the estimated construction cost (or a minimum of $5,000, whichever is greater).<br/>· All design materials must be returned or destroyed — you receive no license to use them.</p>
+    <p><strong>Important Protection:</strong> If you (or anyone working with you) later uses any of our designs to build with another contractor without our written permission and full payment, you will owe a Design Licensing Fee equal to 200% of the total design fees paid or estimated.</p>
 
     <h2>4. Who Owns the Designs</h2>
-    <p>All drawings, renderings, plans, and materials we create belong entirely to us and are protected by copyright law. You receive no right to copy, modify, or use the designs for construction until: (a) you have paid all fees in full, AND (b) you have signed the full construction contract with us OR paid the Design Licensing Fee. Unauthorized use is copyright infringement. We may file a mechanic's lien on your property for any unpaid amounts.</p>
+    <p>All drawings, renderings, plans, and other materials we create ("Work Product") belong entirely to us and are protected by copyright law.</p>
+    <p>You receive no right to copy, modify, or use the designs for construction until both of the following happen:</p>
+    <p class="indent">(a) You have paid all fees in full, and<br/>(b) You have signed the full construction contract with us or paid the Design Licensing Fee.</p>
+    <p>Unauthorized use is copyright infringement. We may also file a mechanic's lien on your property for any unpaid amounts.</p>
 
     <h2>5. Our Promises to You</h2>
-    <p>· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
+    <p class="indent">· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
 
     <h2>6. Your Protections</h2>
-    <p>· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
+    <p class="indent">· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
 
     <h2>7. How We Communicate</h2>
-    <p>All notices must be in writing. Our address: Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903.</p>
+    <p>All notices must be in writing and sent to:</p>
+    <p class="indent"><strong>You:</strong> ${clientName} at ${clientAddr}<br/><strong>Us:</strong> Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903</p>
+    <p>Notices are considered delivered when personally handed, two days after registered mail, or the next business day after overnight courier.</p>
 
     <h2>8. Other Important Information</h2>
-    <p>· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
+    <p class="indent">· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Time is important — we will both work to keep your project moving.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
 
     <div class="page-break"></div>
 
-    <h2>Exhibit A — 5-Step Design-Build Program</h2>
-    <p><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> Site evaluation, two client meetings, vision and inspiration discovery.</p>
-    <p><strong>STEP 2 – Schematic Design:</strong> Structural and energy considerations, two client meetings, floor plan finalization.</p>
-    <p><strong>STEP 3 – Design Development:</strong> Final plans, elevations, renderings, two client meetings, plans to engineering.</p>
-    <p><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, SOW, sub bids, permits, all costs finalized.</p>
-    <p><strong>STEP 5 – Construction:</strong> Performed under separate construction contract.</p>
+    <h2>Exhibit A — Our 5-Step Design-Build Program</h2>
+    <p><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration. <em>Your Assignment: Floor plan + material selection; we explain Buildertrend.</em></p>
+    <p><strong>STEP 2 – Schematic Design:</strong> We handle early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans and apply changes. <em>Your Assignment: Interior selections (cabinetry, fixtures, trim, doors/windows).</em></p>
+    <p><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans are signed off and sent to engineering.</p>
+    <p><strong>STEP 4 – Project Development:</strong> We prepare budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs. All trade bids are finalized.</p>
+    <p><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
 
     <h2>Exhibit B — Insurance &amp; Montana Disclosures</h2>
-    <p>We maintain general liability insurance and appropriate workers' compensation coverage as required by law. One-year express warranty on workmanship and materials (per construction contract). Full certificates available upon request.</p>
+    <p>We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law.</p>
+    <p class="indent">· We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract).<br/>· Full insurance certificates and additional disclosures are available upon request.</p>
 
-    <div style="margin-top:50px;display:grid;grid-template-columns:1fr 1fr;gap:60px;">
+    <p style="margin-top:40px;font-weight:bold;">IN WITNESS WHEREOF, we both agree to the terms above.</p>
+
+    <div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:60px;">
       <div>
-        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Client</p>
-        ${d.clientSig?`<img src="${d.clientSig}" style="width:100%;height:60px;object-fit:contain;" alt="Client Signature"/>`:`<div style="height:60px;border-bottom:1px solid #333;"></div>`}
-        <p style="margin-top:6px;">${esc(d.clientPrintName||d.clientName)}</p>
-        <p style="font-size:10pt;color:#888;">${dt}</p>
+        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;">You (Client)</p>
+        <p><strong>${clientName}</strong></p>
+        ${d.clientSig?`<img src="${d.clientSig}" style="width:100%;height:60px;object-fit:contain;" alt="Client Signature"/>`:`<p style="border-bottom:1px solid #333;height:40px;"></p>`}
+        <p style="font-size:10pt;">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ${dt}</p>
       </div>
       <div>
-        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Contractor</p>
-        ${d.repSig?`<img src="${d.repSig}" style="width:100%;height:60px;object-fit:contain;" alt="Contractor Signature"/>`:`<div style="height:60px;border-bottom:1px solid #333;"></div>`}
-        <p style="margin-top:6px;">${esc(d.repPrintName||d.repName)}</p>
-        <p style="font-size:10pt;color:#888;">Copper Mountain Builders</p>
+        <p style="font-size:10pt;color:#B87333;letter-spacing:2px;text-transform:uppercase;">We (Copper Mountain Builders)</p>
+        ${d.repSig?`<img src="${d.repSig}" style="width:100%;height:60px;object-fit:contain;" alt="Contractor Signature"/>`:`<p style="border-bottom:1px solid #333;height:40px;"></p>`}
+        <p style="font-size:10pt;">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ${dt}</p>
+        <p style="font-size:10pt;">Printed Name &amp; Title: ${esc(d.repPrintName||d.repName)}</p>
       </div>
     </div>
   </body></html>`;
@@ -2472,71 +2493,132 @@ function renderReview(){
 function renderSign(){
   const d = appData;
   const dt = today();
+  const clientName = esc(d.clientName||"[Client Full Legal Name(s)]");
+  const clientAddr = d.clientAddress ? `${esc(d.clientAddress)}, ${esc(d.clientCity||"")}, Montana ${esc(d.clientZip||"")}` : "[Client Mailing Address], [City], Montana [ZIP]";
+  const projectAddr = d.projectAddress ? `${esc(d.projectAddress)}, ${esc(d.projectCity||"")}, Montana ${esc(d.clientZip||"")}` : "[Project Address], [City], Montana [ZIP]";
+  const retainer = d.retainerAmount ? fmt$(d.retainerAmount) : "$[Insert Amount]";
+
   return `<div class="page">
     <div class="card-copper" style="text-align:center;">
       <div style="font-size:11px;letter-spacing:5px;text-transform:uppercase;color:var(--copper);margin-bottom:6px;">Copper Mountain Builders</div>
       <div style="font-size:20px;font-weight:bold;margin-bottom:4px;">Design-Build Agreement</div>
-      <div style="font-size:13px;color:var(--cream-dk);">${esc(d.clientName)} · ${esc(d.projectAddress)}, ${esc(d.projectCity)}, MT</div>
       <div style="font-size:12px;color:var(--stone-light);margin-top:4px;">${dt}</div>
     </div>
 
     <div class="card" style="border-color:rgba(184,115,51,0.4);">
-      <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;max-height:500px;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
-        <p style="margin-bottom:12px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your project in the Flathead Valley. This Agreement explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+      <div style="background:rgba(44,42,39,0.5);border-radius:8px;padding:16px;max-height:none;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--cream-dk);">
+
+        <p style="color:var(--copper);font-size:13px;font-weight:bold;margin-bottom:8px;">Welcome</p>
+        <p style="margin-bottom:8px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+        <p style="margin-bottom:16px;">We designed this document to be easy to read while still giving you the protection and peace of mind you deserve — like a good insurance policy for your design investment.</p>
+
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Parties to This Agreement</p>
+        <p style="margin-bottom:4px;"><strong>You (the Client):</strong></p>
+        <p style="margin-bottom:4px;color:var(--gold);">${clientName}</p>
+        <p style="margin-bottom:12px;color:var(--cream-dk);">${clientAddr}</p>
+        <p style="margin-bottom:4px;"><strong>We (the Contractor):</strong></p>
+        <p style="margin-bottom:4px;">Copper Mountain Builders</p>
+        <p style="margin-bottom:12px;">PO Box 2471, Kalispell, MT 59903</p>
+        <p style="margin-bottom:16px;"><strong>Project Address:</strong> ${projectAddr}</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">1. What We Will Do for You</p>
-        <p style="margin-bottom:8px;">We will provide professional preconstruction design services using our proven <strong>5-Step Design-Build Program</strong> (see Exhibit A). Steps Covered: Step 1 – Initial Consultation + Vision Planning · Step 2 – Schematic Design · Step 3 – Design Development · Step 4 – Project Development. Step 5 (construction) is handled under a separate full construction contract. We have the first right of refusal to build your project.</p>
+        <p style="margin-bottom:8px;">We will provide professional preconstruction design services using our proven <strong>5-Step Design-Build Program</strong> (see Exhibit A for full details). These services cover everything from initial planning through final design documents and bidding preparation.</p>
+        <p style="margin-bottom:4px;"><strong>Steps Covered in This Agreement:</strong></p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Step 1 – Initial Consultation + Vision Planning</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Step 2 – Schematic Design</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Step 3 – Design Development</p>
+        <p style="margin-bottom:8px;padding-left:16px;">· Step 4 – Project Development</p>
+        <p style="margin-bottom:8px;">Step 5 (actual construction and post-build support) is handled under a separate full construction contract that we will present when the design is complete.</p>
+        <p style="margin-bottom:8px;">We include two client meetings per phase in Steps 1–3 and all coordination of surveys, engineering, renderings, and bidding packages.</p>
+        <p style="margin-bottom:8px;"><strong>Your Role (Client Assignments):</strong> In each step you will complete simple assignments such as selecting materials, approving floor plans, and interior choices (detailed in Exhibit A). Timely completion helps keep your project on schedule. If assignments are delayed, we may need to adjust the schedule and charge additional time at our standard rates.</p>
+        <p style="margin-bottom:8px;">This Agreement is your retainer for professional design services. When Steps 1–4 are complete, we will present the full construction contract and we have the first right of refusal to build your project.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">2. Your Investment (Compensation)</p>
-        <p style="margin-bottom:4px;">Hourly rates include a 20% markup for overhead and management:</p>
-        <p style="margin-bottom:8px;">· Principal / General Management: <strong>$250.00/hr</strong><br/>· Architectural Design Services: <strong>$250.00/hr</strong><br/>· Consultants / Specialty Engineering: <strong>$250.00/hr</strong><br/>· Interior/Exterior Designer: <strong>$150.00/hr</strong></p>
-        <p style="margin-bottom:8px;"><strong>Initial Non-Refundable Retainer:</strong> ${fmt$(d.retainerAmount||0)} — payable when you sign and applied to your first invoice(s). Invoices are sent monthly or at phase milestones. Payment is due within <strong>10 calendar days</strong>. Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law). Final design documents are released only after all outstanding amounts are paid in full.</p>
+        <p style="margin-bottom:4px;">We charge a clear hourly rate that includes a 20% markup for overhead and management:</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Principal / General Management: <strong>$250.00 per hour</strong></p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Architectural Design Services: <strong>$250.00 per hour</strong></p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Consultants / Specialty Engineering: <strong>$250.00 per hour</strong></p>
+        <p style="margin-bottom:8px;padding-left:16px;">· Interior/Exterior Designer: <strong>$150.00 per hour</strong></p>
+        <p style="margin-bottom:8px;"><strong>Initial Non-Refundable Retainer: <span style="color:var(--gold);">${retainer}</span></strong> — payable when you sign and applied to your first invoice(s).</p>
+        <p style="margin-bottom:4px;"><strong>Payment Terms:</strong></p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Invoices are sent monthly or at phase milestones.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Payment is due within <strong>10 calendar days</strong>.</p>
+        <p style="margin-bottom:8px;padding-left:16px;">· Late payments accrue interest at 1.5% per month (or the maximum allowed by Montana law).</p>
+        <p style="margin-bottom:16px;">Final design documents are released only after all outstanding amounts are paid in full.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">3. How Long This Lasts &amp; What Happens if We Stop Early</p>
-        <p style="margin-bottom:8px;">This Agreement begins on the date signed and continues until we complete Steps 1–4, or until one of us ends it with <strong>14 days written notice</strong>. If the Agreement ends early: you pay for all work completed and expenses incurred; you pay a <strong>Termination Fee</strong> of 10% of the estimated construction cost (minimum $5,000); all design materials must be returned or destroyed. If you later use our designs with another contractor without written permission and full payment, you owe a <strong>Design Licensing Fee</strong> equal to <strong>200% of total design fees</strong> paid or estimated.</p>
+        <p style="margin-bottom:8px;">This Agreement begins on the date above and continues until we complete Steps 1–4, or until one of us ends it with <strong>14 days written notice</strong>.</p>
+        <p style="margin-bottom:4px;">If the Agreement ends early:</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· You pay for all work we have completed and any expenses incurred up to that date.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· You pay a <strong>Termination Fee</strong> of 10% of the estimated construction cost (or a minimum of $5,000, whichever is greater).</p>
+        <p style="margin-bottom:8px;padding-left:16px;">· All design materials must be returned or destroyed — you receive no license to use them.</p>
+        <p style="margin-bottom:16px;"><strong>Important Protection:</strong> If you (or anyone working with you) later uses any of our designs to build with another contractor without our written permission and full payment, you will owe a <strong>Design Licensing Fee equal to 200% of the total design fees</strong> paid or estimated.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">4. Who Owns the Designs</p>
-        <p style="margin-bottom:8px;">All drawings, renderings, plans, and materials we create belong entirely to us and are protected by copyright law. You receive no right to copy, modify, or use the designs for construction until: (a) you have paid all fees in full, AND (b) you have signed the full construction contract with us OR paid the Design Licensing Fee. Unauthorized use is copyright infringement. We may file a mechanic's lien on your property for any unpaid amounts.</p>
+        <p style="margin-bottom:8px;">All drawings, renderings, plans, and other materials we create ("Work Product") belong entirely to us and are protected by copyright law.</p>
+        <p style="margin-bottom:4px;">You receive no right to copy, modify, or use the designs for construction until both of the following happen:</p>
+        <p style="margin-bottom:4px;padding-left:16px;">(a) You have paid all fees in full, and</p>
+        <p style="margin-bottom:8px;padding-left:16px;">(b) You have signed the full construction contract with us or paid the Design Licensing Fee.</p>
+        <p style="margin-bottom:16px;">Unauthorized use is copyright infringement. We may also file a mechanic's lien on your property for any unpaid amounts (as allowed by Montana law).</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">5. Our Promises to You</p>
-        <p style="margin-bottom:8px;">· We perform all work to the professional standard of care expected in Montana.<br/>· We maintain appropriate insurance (proof available upon request).<br/>· We are an independent contractor (no employment relationship).<br/>· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· We perform all work to the professional standard of care expected in Montana.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· We maintain appropriate insurance (proof available upon request).</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· We are an independent contractor (no employment relationship).</p>
+        <p style="margin-bottom:16px;padding-left:16px;">· We follow all required Montana residential construction disclosures (see Exhibit B).</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">6. Your Protections</p>
-        <p style="margin-bottom:8px;">· Our total liability to you is limited to the total fees you paid us.<br/>· Both sides agree to keep each other's information confidential.<br/>· Either side may end the Agreement with proper notice and payment for work done.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Our total liability to you is limited to the total fees you paid us.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Both sides agree to keep each other's information confidential.</p>
+        <p style="margin-bottom:16px;padding-left:16px;">· Either side may end the Agreement with proper notice and payment for work done.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">7. How We Communicate</p>
-        <p style="margin-bottom:8px;">All notices must be in writing. Our address: Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903. Notices are considered delivered when personally handed, two days after registered mail, or the next business day after overnight courier.</p>
+        <p style="margin-bottom:4px;">All notices must be in writing and sent to:</p>
+        <p style="margin-bottom:4px;padding-left:16px;"><strong>You:</strong> ${clientName} at ${clientAddr}</p>
+        <p style="margin-bottom:8px;padding-left:16px;"><strong>Us:</strong> Copper Mountain Builders, PO Box 2471, Kalispell, MT 59903</p>
+        <p style="margin-bottom:16px;">Notices are considered delivered when personally handed, two days after registered mail, or the next business day after overnight courier.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">8. Other Important Information</p>
-        <p style="margin-bottom:8px;">· This Agreement (plus Exhibits) is the complete understanding between us.<br/>· Any changes must be in writing and signed by both of us.<br/>· Time is important — we will both work to keep your project moving.<br/>· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· This Agreement (plus Exhibits) is the complete understanding between us.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Any changes must be in writing and signed by both of us.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· Time is important — we will both work to keep your project moving.</p>
+        <p style="margin-bottom:16px;padding-left:16px;">· Montana law governs this Agreement. Any disputes will first go to mediation, then Flathead County District Court if needed. The winning side can recover reasonable attorney fees.</p>
 
-        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit A — 5-Step Design-Build Program</p>
-        <p style="margin-bottom:4px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration.</p>
-        <p style="margin-bottom:4px;"><strong>STEP 2 – Schematic Design:</strong> Early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans.</p>
-        <p style="margin-bottom:4px;"><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans signed off and sent to engineering.</p>
-        <p style="margin-bottom:4px;"><strong>STEP 4 – Project Development:</strong> Budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs.</p>
-        <p style="margin-bottom:8px;"><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
+        <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:20px 0 8px 0;">Exhibit A — Our 5-Step Design-Build Program</p>
+        <p style="margin-bottom:8px;"><strong>STEP 1 – Initial Consultation + Vision Planning:</strong> We evaluate your site, foundation needs, timeline, and scope. Two client meetings to discover your vision and architectural inspiration. <em>Your Assignment: Floor plan + material selection; we explain Buildertrend.</em></p>
+        <p style="margin-bottom:8px;"><strong>STEP 2 – Schematic Design:</strong> We handle early structural, environmental, and energy code considerations. Two client meetings to finalize floor plans and apply changes. <em>Your Assignment: Interior selections (cabinetry, fixtures, trim, doors/windows).</em></p>
+        <p style="margin-bottom:8px;"><strong>STEP 3 – Design Development:</strong> We finalize floor plans, elevations, sections, and all materials with renderings. Two client meetings for side-by-side review. Plans are signed off and sent to engineering.</p>
+        <p style="margin-bottom:8px;"><strong>STEP 4 – Project Development:</strong> We prepare budgeting, scheduling, Scope of Work, subcontractor bids, material pricing, permits, and site-prep costs. All trade bids are finalized.</p>
+        <p style="margin-bottom:16px;"><strong>STEP 5 – Construction + Post-Build Support:</strong> Performed only under a separate full construction contract.</p>
 
         <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px 0;">Exhibit B — Insurance &amp; Montana Disclosures</p>
-        <p style="margin-bottom:8px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law. We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract). Full insurance certificates and additional disclosures are available upon request.</p>
+        <p style="margin-bottom:4px;">We maintain general liability insurance and appropriate workers' compensation coverage (or exemption) as required by law.</p>
+        <p style="margin-bottom:4px;padding-left:16px;">· We provide a one-year express warranty on workmanship and materials (detailed in the full construction contract).</p>
+        <p style="margin-bottom:8px;padding-left:16px;">· Full insurance certificates and additional disclosures are available upon request.</p>
       </div>
     </div>
 
     <div class="card-copper">
-      <div class="section-title">Signatures</div>
-      <p style="font-size:12px;color:var(--cream-dk);margin-bottom:16px;line-height:1.6;">By signing below, both parties agree to the terms of this Design-Build Agreement. The non-refundable retainer of <strong style="color:var(--gold);">${fmt$(d.retainerAmount||0)}</strong> is due upon signing.</p>
+      <div class="section-title" style="font-size:12px;">In Witness Whereof</div>
+      <p style="font-size:13px;color:var(--cream-dk);margin-bottom:20px;line-height:1.6;">We both agree to the terms above.</p>
+
+      <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">You (Client): ${clientName}</p>
       ${sigBlock("sig_client","clientSig","Client Signature")}
       <div class="row2">
         <div class="field"><label class="field-label">Print Name</label><input value="${esc(d.clientPrintName||d.clientName)}" oninput="appData.clientPrintName=this.value"/></div>
         <div class="field"><label class="field-label">Date</label><input value="${dt}" readonly style="opacity:0.7"/></div>
       </div>
       <div class="divider"></div>
+      <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">We (Copper Mountain Builders)</p>
       ${sigBlock("sig_rep","repSig","Contractor Signature")}
-      <div class="field"><label class="field-label">Rep Printed Name & Title</label><input value="${esc(d.repPrintName||d.repName)}" oninput="appData.repPrintName=this.value"/></div>
+      <div class="row2">
+        <div class="field"><label class="field-label">Printed Name &amp; Title</label><input value="${esc(d.repPrintName||d.repName)}" oninput="appData.repPrintName=this.value"/></div>
+        <div class="field"><label class="field-label">Date</label><input value="${dt}" readonly style="opacity:0.7"/></div>
+      </div>
     </div>
 
     <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print Signed Agreement</button>
-    <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract (PDF)</button>
+    <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract</button>
     <button class="btn-secondary" onclick="goTo(3)">← Back to Review</button>
   </div>`;
 }
