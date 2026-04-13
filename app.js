@@ -1929,13 +1929,26 @@ Return ONLY this JSON:
 
     visionContent.push({type:"text", text:analysisPrompt});
     if(status) status.textContent = "Analyzing photos and scope…";
-    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1500,
-        messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}] })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
+    let data;
+    for(let attempt = 0; attempt < 4; attempt++){
+      const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1500,
+          messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}] })
+      });
+      data = await res.json();
+      if(data.error){
+        const errStr = JSON.stringify(data.error);
+        if((errStr.includes("overloaded") || res.status === 529 || res.status === 503) && attempt < 3){
+          const wait = (attempt + 1) * 5000;
+          if(status) status.textContent = `Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/4)`;
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        throw new Error(data.error.message);
+      }
+      break;
+    }
     if(!data.content?.[0]?.text) throw new Error("No response from analysis");
     const raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
     const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
@@ -1966,15 +1979,45 @@ async function runGenerateEstimate(){
   const isDavisBacon = appData.davisBacon;
 
   async function workerCall(messages, system, maxTokens=1000, model="claude-sonnet-4-20250514"){
-    const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ model, max_tokens:maxTokens, temperature:0.3, system, messages })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error("Claude error: " + JSON.stringify(data.error));
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    if(!data.content?.[0]?.text) throw new Error("No content in response");
-    return data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    const maxRetries = 4;
+    for(let attempt = 0; attempt < maxRetries; attempt++){
+      try {
+        const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ model, max_tokens:maxTokens, temperature:0.3, system, messages })
+        });
+        const data = await res.json();
+        if(data.error){
+          const errStr = JSON.stringify(data.error);
+          if((errStr.includes("overloaded") || errStr.includes("529") || res.status === 529) && attempt < maxRetries - 1){
+            const wait = (attempt + 1) * 5000;
+            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+          }
+          throw new Error("Claude error: " + errStr);
+        }
+        if(!res.ok){
+          if((res.status === 529 || res.status === 503) && attempt < maxRetries - 1){
+            const wait = (attempt + 1) * 5000;
+            if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+          }
+          throw new Error("HTTP " + res.status);
+        }
+        if(!data.content?.[0]?.text) throw new Error("No content in response");
+        return data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+      } catch(err) {
+        if(err.message.includes("overloaded") && attempt < maxRetries - 1){
+          const wait = (attempt + 1) * 5000;
+          if(btn) btn.textContent = `⏳ Server busy, retrying in ${Math.round(wait/1000)}s... (${attempt+2}/${maxRetries})`;
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        throw err;
+      }
+    }
   }
 
   function safeJSON(text, label){
