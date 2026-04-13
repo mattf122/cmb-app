@@ -2705,6 +2705,7 @@ function renderSign(){
 
     <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print Signed Agreement</button>
     <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract</button>
+    ${odAccount ? `<button class="btn-primary" style="background:linear-gradient(135deg, #1a73e8, #4285f4);box-shadow:0 4px 20px rgba(26,115,232,0.3);" onclick="generateSignedContractPdf();setTimeout(syncVisitToOneDrive,500)" id="od-sync-btn-sign">☁ Save & Sync to OneDrive</button>` : ""}
     <button class="btn-secondary" onclick="goTo(3)">← Back to Review</button>
   </div>`;
 }
@@ -2846,7 +2847,6 @@ function render(){
   else if(currentStep===2) html = renderEstimate();
   else if(currentStep===3) html = renderReview();
   else if(currentStep===4) html = renderSign();
-  html += renderPrintDoc();
   app.innerHTML = html;
   updateHeader();
   if(currentStep===4){
