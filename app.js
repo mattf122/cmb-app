@@ -2525,16 +2525,24 @@ async function regenerateConcept(index){
 async function callOpenAIImageEdit(beforePhotoDataUrl, prompt){
   const WORKER = "https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev/openai";
 
-  // Extract base64 data from dataUrl
-  const base64Data = beforePhotoDataUrl.includes(",") ? beforePhotoDataUrl.split(",")[1] : beforePhotoDataUrl;
+  // Extract base64 data and detect media type from dataUrl
+  let base64Data, mediaType = "image/jpeg";
+  if(beforePhotoDataUrl.includes(",")){
+    const parts = beforePhotoDataUrl.split(",");
+    base64Data = parts[1];
+    const mMatch = parts[0].match(/data:([^;]+)/);
+    if(mMatch) mediaType = mMatch[1];
+  } else {
+    base64Data = beforePhotoDataUrl;
+  }
 
   const res = await fetch(WORKER, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       image: base64Data,
+      mediaType: mediaType,
       prompt: `You are looking at a real photo of an existing room/space. Create a photorealistic image showing this SAME space with the following modifications. Keep the exact same room geometry, perspective, windows, and architectural elements. Only change what is described:\n\n${prompt}`,
-      model: "gpt-image-1",
       size: "1024x1024",
       quality: "high"
     })
@@ -2543,7 +2551,19 @@ async function callOpenAIImageEdit(beforePhotoDataUrl, prompt){
   const data = await res.json();
   if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
 
-  // OpenAI returns data[0].b64_json or data[0].url
+  // Response from our worker — look for b64 image in multiple formats
+  if(data.image_b64){
+    return "data:image/png;base64," + data.image_b64;
+  }
+  // Fallback: check OpenAI Responses API output format
+  if(data.output){
+    for(const item of data.output){
+      if(item.type === "image_generation_call" && item.result){
+        return "data:image/png;base64," + item.result;
+      }
+    }
+  }
+  // Fallback: Images API format
   if(data.data?.[0]?.b64_json){
     return "data:image/png;base64," + data.data[0].b64_json;
   } else if(data.data?.[0]?.url){
