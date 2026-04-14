@@ -1,5 +1,5 @@
 // ── State ──────────────────────────────────────────────────────────
-const STEPS = ["Client","Scope","Estimate","Review","Sign"];
+const STEPS = ["Client","Scope","Concept","Estimate","Review","Sign"];
 const ZONE_TYPES = [
   "Residential Remodel",
   "Commercial Remodel / Tenant Improvement",
@@ -201,6 +201,7 @@ let appData = {
   retainerAmount: "", clientSig: null, repSig: null,
   clientPrintName: "", repPrintName: "",
   clarifyingQuestions: [], clarifyingAnswers: {},
+  conceptImages: [],
   davisBacon: false,
   marginPercent: 20
 };
@@ -2116,6 +2117,19 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
         visionContent.push({type:"text", text:`\n\n=== CONSTRUCTION DOCUMENTS — EXTRACTED TEXT ===\nThe following text was extracted from uploaded PDF blueprints and construction documents. This contains dimensions, specifications, schedules, notes, and all written content from the plans. Analyze this thoroughly for scope, quantities, and pricing impacts.\n\n${pdfText}`});
       }
 
+      // Add approved concept images to analysis
+      const approvedConcepts = (appData.conceptImages||[]).filter(c => c.approved);
+      if(approvedConcepts.length > 0){
+        visionContent.push({type:"text", text: "=== APPROVED CONCEPT RENDERINGS ===\nThe following are AI-generated concept images that the client has approved. These show EXACTLY what the finished spaces should look like. Use these to identify specific materials, finishes, and scope items for the quantity takeoff."});
+        for(const concept of approvedConcepts){
+          if(concept.afterImage && concept.afterImage.startsWith("data:")){
+            const parts = concept.afterImage.split(",");
+            visionContent.push({type:"image", source:{type:"base64", media_type:"image/png", data:parts[1]}});
+            visionContent.push({type:"text", text: "Client-approved concept. Prompt: " + concept.prompt});
+          }
+        }
+      }
+
       const visionModels = ["claude-opus-4-20250514","claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
       for(let va = 0; va < visionModels.length; va++){
         const isFB = va > 0;
@@ -2381,9 +2395,161 @@ function renderScope(){
     ` : ""}
 
     <div style="height:8px"></div>
-    <button class="btn-primary" onclick="if(appData.zones[0].type){goTo(2)}else{alert('Please select a project type.')}">Next: Generate Estimate →</button>
+    <button class="btn-primary" onclick="if(appData.zones[0].type){goTo(2)}else{alert('Please select a project type.')}">Next: Concept Images →</button>
     <button class="btn-secondary" onclick="goTo(0)">← Back</button>
   </div>`;
+}
+
+// ── Concept Images ────────────────────────────────────────────────────
+function renderConcept(){
+  const z = appData.zones[0];
+  const beforePhotos = (z.photosBefore||[]);
+  const concepts = appData.conceptImages || [];
+
+  return `<div class="page">
+    <div class="card-copper" style="text-align:center;">
+      <div style="font-size:11px;letter-spacing:5px;text-transform:uppercase;color:var(--copper);margin-bottom:6px;">Copper Mountain Builders</div>
+      <div style="font-size:20px;font-weight:bold;">Concept Images</div>
+      <div style="font-size:12px;color:var(--stone-light);margin-top:6px;">Select a before photo, describe changes, and AI generates a realistic concept</div>
+    </div>
+
+    ${concepts.map((c, i) => `
+      <div class="card-copper" id="concept-${i}">
+        <div class="section-title">Concept ${i+1}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--stone-light);margin-bottom:4px;font-weight:600;">Before</div>
+            <img src="${esc(c.beforePhoto)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,0.1);" alt="Before"/>
+          </div>
+          <div>
+            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:${c.approved?'var(--success)':'var(--copper)'};margin-bottom:4px;font-weight:600;">${c.approved?'Approved':'AI Generated'}</div>
+            ${c.afterImage ? `<img src="${esc(c.afterImage)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid ${c.approved?'rgba(74,124,89,0.5)':'rgba(184,115,51,0.3)'};" alt="Concept"/>` : `<div style="width:100%;aspect-ratio:4/3;border-radius:10px;background:rgba(0,0,0,0.3);border:2px dashed rgba(184,115,51,0.3);display:flex;align-items:center;justify-content:center;color:var(--stone-light);font-size:13px;" id="concept-preview-${i}">Generating...</div>`}
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Your Prompt</label>
+          <textarea style="font-size:13px;min-height:50px;" oninput="appData.conceptImages[${i}].prompt=this.value">${esc(c.prompt||'')}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-primary" style="flex:1;margin:0;font-size:13px;" onclick="regenerateConcept(${i})">🔄 Regenerate</button>
+          ${c.approved ? `<button class="btn-secondary" style="flex:1;margin:0;font-size:13px;border-color:var(--success);color:var(--success);" onclick="appData.conceptImages[${i}].approved=false;render()">✓ Approved</button>` : `<button class="btn-primary" style="flex:1;margin:0;font-size:13px;background:linear-gradient(135deg,var(--success),#2d6a4f);" onclick="appData.conceptImages[${i}].approved=true;render()">✓ Approve</button>`}
+          <button class="btn-secondary" style="flex:0 0 44px;margin:0;font-size:16px;padding:8px;" onclick="appData.conceptImages.splice(${i},1);render()">🗑</button>
+        </div>
+      </div>
+    `).join("")}
+
+    <div class="card" style="border:2px dashed rgba(184,115,51,0.2);text-align:center;padding:20px;">
+      <div style="font-size:13px;color:var(--stone-light);margin-bottom:12px;">Select a before photo to create a concept</div>
+      ${beforePhotos.length > 0 ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;">
+          ${beforePhotos.map((p, i) => `<img src="${p}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;border:2px solid rgba(184,115,51,0.3);cursor:pointer;" onclick="startNewConcept(${i})" alt="Photo ${i+1}"/>`).join("")}
+        </div>
+      ` : `<p style="font-size:13px;color:var(--stone-light);margin-bottom:8px;">No before photos yet — go back to Scope to add photos.</p>`}
+      <div id="new-concept-area" style="display:none;">
+        <div class="field">
+          <label class="field-label">Describe the changes you want to see</label>
+          <textarea id="new-concept-prompt" placeholder="Replace the oak cabinets with white shaker style, add quartz countertops with grey veining, subway tile backsplash..." style="font-size:13px;min-height:70px;"></textarea>
+        </div>
+        <button class="btn-primary" style="font-size:14px;" onclick="generateNewConcept()" id="gen-concept-btn">✨ Generate Concept Image</button>
+        <div id="concept-error" class="error-msg hidden" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div style="height:14px;"></div>
+    <button class="btn-primary" onclick="goTo(3)">Next: Generate Estimate →</button>
+    <button class="btn-secondary" onclick="goTo(1)">← Back to Scope</button>
+  </div>`;
+}
+
+let _newConceptPhotoIndex = -1;
+
+function startNewConcept(photoIndex){
+  _newConceptPhotoIndex = photoIndex;
+  const area = document.getElementById("new-concept-area");
+  if(area) area.style.display = "block";
+  const ta = document.getElementById("new-concept-prompt");
+  if(ta) ta.focus();
+}
+
+async function generateNewConcept(){
+  const btn = document.getElementById("gen-concept-btn");
+  const err = document.getElementById("concept-error");
+  const prompt = document.getElementById("new-concept-prompt")?.value?.trim();
+  if(!prompt){ err.textContent = "Please describe the changes you want to see."; err.classList.remove("hidden"); return; }
+  if(_newConceptPhotoIndex < 0) return;
+
+  const beforePhoto = appData.zones[0].photosBefore[_newConceptPhotoIndex];
+  btn.disabled = true; btn.textContent = "⏳ Generating concept image...";
+  err.classList.add("hidden");
+  const wakeLock = await acquireWakeLock();
+
+  try {
+    const afterImage = await callOpenAIImageEdit(beforePhoto, prompt);
+    appData.conceptImages.push({
+      beforePhoto: beforePhoto,
+      prompt: prompt,
+      afterImage: afterImage,
+      approved: false
+    });
+    _newConceptPhotoIndex = -1;
+    releaseWakeLock(wakeLock);
+    render();
+  } catch(e) {
+    releaseWakeLock(wakeLock);
+    err.textContent = "Error: " + e.message; err.classList.remove("hidden");
+    btn.disabled = false; btn.textContent = "✨ Generate Concept Image";
+  }
+}
+
+async function regenerateConcept(index){
+  const concept = appData.conceptImages[index];
+  if(!concept) return;
+  const card = document.getElementById("concept-" + index);
+  const btns = card?.querySelectorAll("button");
+  if(btns) btns.forEach(b => b.disabled = true);
+  const wakeLock = await acquireWakeLock();
+
+  try {
+    const afterImage = await callOpenAIImageEdit(concept.beforePhoto, concept.prompt);
+    appData.conceptImages[index].afterImage = afterImage;
+    appData.conceptImages[index].approved = false;
+    releaseWakeLock(wakeLock);
+    render();
+  } catch(e) {
+    releaseWakeLock(wakeLock);
+    alert("Regenerate failed: " + e.message);
+    if(btns) btns.forEach(b => b.disabled = false);
+  }
+}
+
+async function callOpenAIImageEdit(beforePhotoDataUrl, prompt){
+  const WORKER = "https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev/openai";
+
+  // Extract base64 data from dataUrl
+  const base64Data = beforePhotoDataUrl.includes(",") ? beforePhotoDataUrl.split(",")[1] : beforePhotoDataUrl;
+
+  const res = await fetch(WORKER, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image: base64Data,
+      prompt: `You are looking at a real photo of an existing room/space. Create a photorealistic image showing this SAME space with the following modifications. Keep the exact same room geometry, perspective, windows, and architectural elements. Only change what is described:\n\n${prompt}`,
+      model: "gpt-image-1",
+      size: "1024x1024",
+      quality: "high"
+    })
+  });
+
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+  // OpenAI returns data[0].b64_json or data[0].url
+  if(data.data?.[0]?.b64_json){
+    return "data:image/png;base64," + data.data[0].b64_json;
+  } else if(data.data?.[0]?.url){
+    return data.data[0].url;
+  }
+  throw new Error("No image returned from OpenAI");
 }
 
 function renderEstimate(){
@@ -2395,7 +2561,7 @@ function renderEstimate(){
       <div id="est-error" class="error-msg hidden"></div>
       <button class="btn-primary" id="gen-est-btn" onclick="runGenerateEstimate()">✦ Generate AI Estimate</button>
     </div>
-    <button class="btn-secondary" onclick="goTo(1)">← Back</button>
+    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 
   const suggested = calcRetainerSuggestion(est.totalLow);
@@ -2527,8 +2693,8 @@ function renderEstimate(){
     </div>`:""}
     <div id="est-error" class="error-msg hidden"></div>
     <button class="btn-secondary" onclick="appData.estimate=null;render()">↻ Regenerate</button>
-    <button class="btn-primary" onclick="goTo(3)">Next: Review →</button>
-    <button class="btn-secondary" onclick="goTo(1)">← Back</button>
+    <button class="btn-primary" onclick="goTo(4)">Next: Review →</button>
+    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 }
 
@@ -2571,8 +2737,8 @@ function renderReview(){
         <p style="font-size:11px;color:var(--stone-light);margin-top:6px;line-height:1.5;">Saves visit JSON + proposal + estimate to OneDrive</p>
       </div>
     </div>
-    <button class="btn-primary" onclick="goTo(4)">Next: Sign Agreement →</button>
-    <button class="btn-secondary" onclick="goTo(2)">← Back</button>
+    <button class="btn-primary" onclick="goTo(5)">Next: Sign Agreement →</button>
+    <button class="btn-secondary" onclick="goTo(3)">← Back</button>
   </div>`;
 }
 
@@ -2703,10 +2869,45 @@ function renderSign(){
       </div>
     </div>
 
+    ${appData.estimate ? `
+    <div class="card" style="border:1px solid rgba(184,115,51,0.25);">
+      <div class="section-title">Conceptual Budget Summary</div>
+      <p style="font-size:12px;color:var(--stone-light);margin-bottom:14px;line-height:1.5;">The following is a preliminary conceptual budget range based on our initial site evaluation. Final pricing will be determined after completion of Steps 1–4.</p>
+      ${(()=>{
+        const est = appData.estimate;
+        const m = 1 + (appData.marginPercent||20)/100;
+        const sections = est.sections || est.zones || [];
+        return sections.map(s => {
+          const sLow = Math.round((s.low||0) * m);
+          const sHigh = Math.round((s.high||0) * m);
+          return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;"><span style="color:var(--cream-dk);">'+esc(s.name)+'</span><span style="color:var(--gold);font-weight:500;">'+fmt$(sLow)+' – '+fmt$(sHigh)+'</span></div>';
+        }).join("");
+      })()}
+      ${(()=>{
+        const est = appData.estimate;
+        const m = 1 + (appData.marginPercent||20)/100;
+        if(est.gcLow){
+          return '<div style="margin-top:8px;display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span style="color:var(--cream-dk);">General Conditions</span><span style="color:var(--cream-dk);">'+fmt$(Math.round(est.gcLow*m))+' – '+fmt$(Math.round(est.gcHigh*m))+'</span></div>';
+        }
+        return '';
+      })()}
+      <div style="display:flex;justify-content:space-between;padding:14px 0 4px;font-size:17px;font-weight:700;border-top:2px solid rgba(184,115,51,0.3);margin-top:8px;">
+        <span style="color:var(--cream);">Conceptual Budget Range</span>
+        <span style="color:var(--gold);">${fmt$(appData.estimate.totalLow)} – ${fmt$(appData.estimate.totalHigh)}</span>
+      </div>
+      <p style="font-size:11px;color:var(--stone-light);font-style:italic;margin-top:10px;line-height:1.5;">*This is a conceptual estimate only and does not constitute a binding bid. Final scope, specifications, and pricing will be determined through the Design-Build process outlined in this Agreement.</p>
+    </div>
+    <div style="padding:10px;text-align:center;">
+      <p style="font-size:11px;color:var(--stone-light);">Initial Non-Refundable Retainer</p>
+      <p style="font-size:20px;font-weight:700;color:var(--gold);margin:4px 0;">${fmt$(d.retainerAmount||0)}</p>
+      <p style="font-size:11px;color:var(--stone-light);">Due upon execution of this Agreement</p>
+    </div>
+    ` : ''}
+
     <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print Signed Agreement</button>
     <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract</button>
     ${odAccount ? `<button class="btn-primary" style="background:linear-gradient(135deg, #1a73e8, #4285f4);box-shadow:0 4px 20px rgba(26,115,232,0.3);" onclick="generateSignedContractPdf();setTimeout(syncVisitToOneDrive,500)" id="od-sync-btn-sign">☁ Save & Sync to OneDrive</button>` : ""}
-    <button class="btn-secondary" onclick="goTo(3)">← Back to Review</button>
+    <button class="btn-secondary" onclick="goTo(4)">← Back to Review</button>
   </div>`;
 }
 
@@ -2844,12 +3045,13 @@ function render(){
   let html = "";
   if(currentStep===0) html = renderClient();
   else if(currentStep===1) html = renderScope();
-  else if(currentStep===2) html = renderEstimate();
-  else if(currentStep===3) html = renderReview();
-  else if(currentStep===4) html = renderSign();
+  else if(currentStep===2) html = renderConcept();
+  else if(currentStep===3) html = renderEstimate();
+  else if(currentStep===4) html = renderReview();
+  else if(currentStep===5) html = renderSign();
   app.innerHTML = html;
   updateHeader();
-  if(currentStep===4){
+  if(currentStep===5){
     setTimeout(()=>{ initSigPad("sig_client","clientSig"); initSigPad("sig_rep","repSig"); }, 50);
   }
   // Restore scroll position after render
