@@ -1,5 +1,5 @@
 // ── State ──────────────────────────────────────────────────────────
-const STEPS = ["Client","Scope","Concept","Estimate","Review","Sign"];
+const STEPS = ["Client","Scope","Concept","Estimate","Sign","Review"];
 const ZONE_TYPES = [
   "Residential Remodel",
   "Commercial Remodel / Tenant Improvement",
@@ -678,14 +678,13 @@ www.coppermountainbuilders.com
   window.location.href = `mailto:${d.clientEmail||""}?subject=${subject}&body=${body}`;
 }
 
-function generateSignedContractPdf(){
+function generateSignedContractBlob(){
   const d = appData;
   const dt = today();
   const clientName = esc(d.clientName||"");
   const clientAddr = `${esc(d.clientAddress||"")}, ${esc(d.clientCity||"")}, Montana ${esc(d.clientZip||"")}`;
   const projectAddr = `${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, Montana ${esc(d.clientZip||"")}`;
   const retainer = fmt$(d.retainerAmount||0);
-  const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_Design-Build_Agreement_" + new Date().toLocaleDateString().replace(/\//g,"-") + ".doc";
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><style>
     @page{size:8.5in 11in;margin:1in} body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;color:#2C2A27;margin:0;padding:20px}
     h1{font-size:20pt;font-weight:bold;color:#B87333;text-align:center;margin-bottom:5px}
@@ -782,7 +781,12 @@ function generateSignedContractPdf(){
       </div>
     </div>
   </body></html>`;
-  const blob = new Blob([html], {type: 'application/msword'});
+  return new Blob([html], {type: 'application/msword'});
+}
+
+function generateSignedContractPdf(){
+  const blob = generateSignedContractBlob();
+  const filename = (appData.clientName||"CMB").replace(/\s+/g,"_") + "_Design-Build_Agreement_" + new Date().toLocaleDateString().replace(/\//g,"-") + ".doc";
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
@@ -1795,6 +1799,49 @@ async function syncVisitToOneDrive(){
       const excelBlob = await generateExcelBlob();
       if(excelBlob){ await odUploadFile(token, `${folder}/${client}_Estimate_${dateStr}.xlsx`, await excelBlob.arrayBuffer(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); uploadedFiles.push("📊 Estimate spreadsheet (Excel)"); }
     }
+    // Upload signed contract document
+    showOdToast("☁ Uploading signed contract...");
+    try {
+      const contractBlob = generateSignedContractBlob();
+      if(contractBlob){ await odUploadFile(token, `${folder}/${client}_Design-Build_Agreement_${dateStr}.doc`, await contractBlob.arrayBuffer(), "application/msword"); uploadedFiles.push("📝 Signed contract (Word)"); }
+    } catch(e){ console.warn("Contract upload:", e); }
+
+    // Upload before photos
+    const beforePhotos = (d.zones?.[0]?.photosBefore || []);
+    for(let pi = 0; pi < beforePhotos.length; pi++){
+      showOdToast(`☁ Uploading photo ${pi+1}/${beforePhotos.length}...`);
+      try {
+        const photoData = beforePhotos[pi];
+        if(photoData && photoData.startsWith("data:")){
+          const parts = photoData.split(",");
+          const byteStr = atob(parts[1]);
+          const bytes = new Uint8Array(byteStr.length);
+          for(let i=0;i<byteStr.length;i++) bytes[i] = byteStr.charCodeAt(i);
+          const ext = photoData.includes("png") ? "png" : "jpg";
+          const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+          await odUploadFile(token, `${folder}/Photos/before_${pi+1}.${ext}`, bytes.buffer, mimeType);
+        }
+      } catch(e){ console.warn("Photo upload:", e); }
+    }
+    if(beforePhotos.length > 0) uploadedFiles.push(`📷 ${beforePhotos.length} before photo(s)`);
+
+    // Upload approved concept images
+    const concepts = (d.conceptImages || []).filter(c => c.approved && c.afterImage);
+    for(let ci = 0; ci < concepts.length; ci++){
+      showOdToast(`☁ Uploading concept ${ci+1}/${concepts.length}...`);
+      try {
+        const imgData = concepts[ci].afterImage;
+        if(imgData && imgData.startsWith("data:")){
+          const parts = imgData.split(",");
+          const byteStr = atob(parts[1]);
+          const bytes = new Uint8Array(byteStr.length);
+          for(let i=0;i<byteStr.length;i++) bytes[i] = byteStr.charCodeAt(i);
+          await odUploadFile(token, `${folder}/Concepts/concept_${ci+1}.png`, bytes.buffer, "image/png");
+        }
+      } catch(e){ console.warn("Concept upload:", e); }
+    }
+    if(concepts.length > 0) uploadedFiles.push(`✨ ${concepts.length} concept image(s)`);
+
     appData._odSyncedAt = new Date().toISOString();
     appData._odFolder = folder;
     if(syncBtn){ syncBtn.disabled = false; syncBtn.textContent = "☁ Sync to OneDrive"; }
@@ -1820,7 +1867,7 @@ function showSyncSuccessPage(uploadedFiles, folder){
     </div>
     <div style="display:flex;gap:12px;justify-content:center;">
       <button onclick="startNewVisit()" style="flex:1;padding:14px 24px;background:var(--copper);border:none;border-radius:8px;color:white;font-size:15px;font-weight:600;cursor:pointer;">🆕 Start New Visit</button>
-      <button onclick="closeSyncSuccess()" style="flex:1;padding:14px 24px;background:transparent;border:2px solid var(--stone-light);border-radius:8px;color:var(--stone);font-size:15px;font-weight:600;cursor:pointer;">← Back to Review</button>
+      <button onclick="closeSyncSuccess()" style="flex:1;padding:14px 24px;background:transparent;border:2px solid var(--stone-light);border-radius:8px;color:var(--stone);font-size:15px;font-weight:600;cursor:pointer;">← Back</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
@@ -2400,6 +2447,16 @@ function renderScope(){
   </div>`;
 }
 
+// ── Image Lightbox ────────────────────────────────────────────────────
+function showLightbox(src){
+  const overlay = document.createElement("div");
+  overlay.id = "lightbox-overlay";
+  overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;z-index:10000;cursor:pointer;padding:16px;backdrop-filter:blur(4px);";
+  overlay.onclick = () => overlay.remove();
+  overlay.innerHTML = `<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.5);" alt="Full size"/><div style="position:absolute;top:16px;right:20px;color:white;font-size:28px;cursor:pointer;opacity:0.7;">✕</div>`;
+  document.body.appendChild(overlay);
+}
+
 // ── Concept Images ────────────────────────────────────────────────────
 function renderConcept(){
   const z = appData.zones[0];
@@ -2419,11 +2476,11 @@ function renderConcept(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
           <div>
             <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--stone-light);margin-bottom:4px;font-weight:600;">Before</div>
-            <img src="${esc(c.beforePhoto)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,0.1);" alt="Before"/>
+            <img src="${esc(c.beforePhoto)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;" onclick="showLightbox(this.src)" alt="Before"/>
           </div>
           <div>
             <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:${c.approved?'var(--success)':'var(--copper)'};margin-bottom:4px;font-weight:600;">${c.approved?'Approved':'AI Generated'}</div>
-            ${c.afterImage ? `<img src="${esc(c.afterImage)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid ${c.approved?'rgba(74,124,89,0.5)':'rgba(184,115,51,0.3)'};" alt="Concept"/>` : `<div style="width:100%;aspect-ratio:4/3;border-radius:10px;background:rgba(0,0,0,0.3);border:2px dashed rgba(184,115,51,0.3);display:flex;align-items:center;justify-content:center;color:var(--stone-light);font-size:13px;" id="concept-preview-${i}">Generating...</div>`}
+            ${c.afterImage ? `<img src="${esc(c.afterImage)}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;border:1px solid ${c.approved?'rgba(74,124,89,0.5)':'rgba(184,115,51,0.3)'};cursor:pointer;" onclick="showLightbox(this.src)" alt="Concept"/>` : `<div style="width:100%;aspect-ratio:4/3;border-radius:10px;background:rgba(0,0,0,0.3);border:2px dashed rgba(184,115,51,0.3);display:flex;align-items:center;justify-content:center;color:var(--stone-light);font-size:13px;" id="concept-preview-${i}">Generating...</div>`}
           </div>
         </div>
         <div class="field">
@@ -2713,7 +2770,7 @@ function renderEstimate(){
     </div>`:""}
     <div id="est-error" class="error-msg hidden"></div>
     <button class="btn-secondary" onclick="appData.estimate=null;render()">↻ Regenerate</button>
-    <button class="btn-primary" onclick="goTo(4)">Next: Review →</button>
+    <button class="btn-primary" onclick="goTo(4)">Next: Sign Agreement →</button>
     <button class="btn-secondary" onclick="goTo(2)">← Back</button>
   </div>`;
 }
@@ -2749,6 +2806,8 @@ function renderReview(){
       <button class="btn-secondary" onclick="emailProposal()" style="margin-bottom:8px;">📧 Email Proposal to Client</button>
       <button class="btn-secondary" onclick="exportExcel()" style="margin-bottom:8px;">📊 Download Estimate (Excel)</button>
       <button class="btn-secondary" onclick="generateProposalDocument()" style="margin-bottom:8px;">📄 Download Proposal Document</button>
+      <button class="btn-secondary" onclick="window.print();fullSave()" style="margin-bottom:8px;">🖨 Print Signed Agreement</button>
+      <button class="btn-secondary" onclick="generateSignedContractPdf()" style="margin-bottom:8px;">📄 Download Signed Contract</button>
       <button class="btn-secondary" onclick="fullSave()">🗂 Save Visit to App</button>
       <div style="border-top:1px solid rgba(92,88,80,0.4);margin-top:12px;padding-top:12px;">
         <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stone-light);margin-bottom:8px;">OneDrive</div>
@@ -2757,8 +2816,7 @@ function renderReview(){
         <p style="font-size:11px;color:var(--stone-light);margin-top:6px;line-height:1.5;">Saves visit JSON + proposal + estimate to OneDrive</p>
       </div>
     </div>
-    <button class="btn-primary" onclick="goTo(5)">Next: Sign Agreement →</button>
-    <button class="btn-secondary" onclick="goTo(3)">← Back</button>
+    <button class="btn-secondary" onclick="goTo(4)">← Back to Agreement</button>
   </div>`;
 }
 
@@ -2924,10 +2982,8 @@ function renderSign(){
     </div>
     ` : ''}
 
-    <button class="btn-primary" onclick="window.print();fullSave()">🖨 Print Signed Agreement</button>
-    <button class="btn-primary" style="background:linear-gradient(135deg, var(--success), #2d6a4f);box-shadow:0 4px 20px rgba(74,124,89,0.3);" onclick="generateSignedContractPdf()">📄 Download Signed Contract</button>
-    ${odAccount ? `<button class="btn-primary" style="background:linear-gradient(135deg, #1a73e8, #4285f4);box-shadow:0 4px 20px rgba(26,115,232,0.3);" onclick="generateSignedContractPdf();setTimeout(syncVisitToOneDrive,500)" id="od-sync-btn-sign">☁ Save & Sync to OneDrive</button>` : ""}
-    <button class="btn-secondary" onclick="goTo(4)">← Back to Review</button>
+    <button class="btn-primary" onclick="goTo(5)">Next: Save & Export →</button>
+    <button class="btn-secondary" onclick="goTo(3)">← Back to Estimate</button>
   </div>`;
 }
 
@@ -3067,11 +3123,11 @@ function render(){
   else if(currentStep===1) html = renderScope();
   else if(currentStep===2) html = renderConcept();
   else if(currentStep===3) html = renderEstimate();
-  else if(currentStep===4) html = renderReview();
-  else if(currentStep===5) html = renderSign();
+  else if(currentStep===4) html = renderSign();
+  else if(currentStep===5) html = renderReview();
   app.innerHTML = html;
   updateHeader();
-  if(currentStep===5){
+  if(currentStep===4){
     setTimeout(()=>{ initSigPad("sig_client","clientSig"); initSigPad("sig_rep","repSig"); }, 50);
   }
   // Restore scroll position after render
