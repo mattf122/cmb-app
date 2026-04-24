@@ -102,7 +102,7 @@ function computeEstimateFromTakeoff(takeoffData, marginPercent){
     }));
     return {
       name: trade.trade,
-      csiCode: trade.csiCode || getBtInfo(trade.trade).labor,
+      csiCode: trade.csiCode || getCSIDiv(trade.trade).name,
       items,
       low:  items.reduce((s,i) => s + i.lineTotalLow, 0),
       high: items.reduce((s,i) => s + i.lineTotalHigh, 0)
@@ -281,366 +281,370 @@ function calcRetainerSuggestion(total){
   return 35000;
 }
 
-// Buildertrend CSI Cost Code Map
-// Each entry: { labor: "X.X01 Name Labor", material: "X.X02 Name Material", div: "XX Division Name" }
-const BT_MAP = {
-  // Division 00 — Procurement
-  "Permits":                    { labor: "0.101 Permits and Approvals Labor",                  material: "0.102 Permits and Approvals Material",                  div: "00 Procurement and Contracting Requirements" },
-  "Design Services":            { labor: "0.201 Design and Pre-Construction Services Labor",    material: "0.202 Design and Pre-Construction Services Material",    div: "00 Procurement and Contracting Requirements" },
-  "Bidding":                    { labor: "0.301 Bidding and Estimating Labor",                  material: "0.302 Bidding and Estimating Material",                  div: "00 Procurement and Contracting Requirements" },
-  "Insurance":                  { labor: "0.601 Initial Insurance and Bonding Labor",           material: "0.602 Initial Insurance and Bonding Material",           div: "00 Procurement and Contracting Requirements" },
-  // Division 01 — General Requirements
-  "General Conditions":         { labor: "1.101 Project Administration and General Office Labor", material: "1.102 Project Administration and General Office Material", div: "01 General Requirements" },
-  "Project Management":         { labor: "1.201 Project Personnel Costs Labor",                material: "1.202 Project Personnel Costs Material",                div: "01 General Requirements" },
-  "Superintendent":             { labor: "1.201 Project Personnel Costs Labor",                material: "1.202 Project Personnel Costs Material",                div: "01 General Requirements" },
-  "Temporary Facilities":       { labor: "1.301 Temporary Facilities and Site Controls Labor", material: "1.302 Temporary Facilities and Site Controls Material", div: "01 General Requirements" },
-  "Temporary Utilities":        { labor: "1.351 Temporary Utilities and Site Access Labor",    material: "1.352 Temporary Utilities and Site Access Material",    div: "01 General Requirements" },
-  "Safety":                     { labor: "1.601 Safety and Compliance Labor",                  material: "1.602 Safety and Compliance Material",                  div: "01 General Requirements" },
-  "Bonding":                    { labor: "1.701 Bonding and Insurance Labor",                  material: "1.702 Bonding and Insurance Material",                  div: "01 General Requirements" },
-  "Cleanup":                    { labor: "1.901 Cleaning and Site Maintenance Labor",          material: "1.902 Cleaning and Site Maintenance Material",          div: "01 General Requirements" },
-  "Dumpster":                   { labor: "1.901 Cleaning and Site Maintenance Labor",          material: "1.902 Cleaning and Site Maintenance Material",          div: "01 General Requirements" },
-  "Contingency":                { labor: "1.991 Uncategorized Labor",                          material: "1.992 Uncategorized Material",                          div: "01 General Requirements" },
-  // Division 02 — Existing Conditions
-  "Demolition":                 { labor: "2.201 Demolition and Removal Labor",                 material: "2.202 Demolition and Removal Material",                 div: "02 Existing Conditions" },
-  "Selective Demolition":       { labor: "2.201 Demolition and Removal Labor",                 material: "2.202 Demolition and Removal Material",                 div: "02 Existing Conditions" },
-  "Site Survey":                { labor: "2.101 Site Survey and Assessment Labor",             material: "2.102 Site Survey and Assessment Material",             div: "02 Existing Conditions" },
-  "Environmental Remediation":  { labor: "2.301 Environmental Remediation Labor",              material: "2.302 Environmental Remediation Material",              div: "02 Existing Conditions" },
-  "Abatement":                  { labor: "2.301 Environmental Remediation Labor",              material: "2.302 Environmental Remediation Material",              div: "02 Existing Conditions" },
-  "Site Clearing":              { labor: "2.401 Site Preparation and Clearing Labor",          material: "2.402 Site Preparation and Clearing Material",          div: "02 Existing Conditions" },
-  // Division 03 — Concrete
-  "Concrete":                   { labor: "3.301 Cast-in-Place Concrete Labor",                 material: "3.302 Cast-in-Place Concrete Material",                 div: "03 Concrete" },
-  "Foundation":                 { labor: "3.101 Formwork Labor",                               material: "3.102 Formwork Material",                               div: "03 Concrete" },
-  "Footings":                   { labor: "3.101 Formwork Labor",                               material: "3.102 Formwork Material",                               div: "03 Concrete" },
-  "Slab":                       { labor: "3.301 Cast-in-Place Concrete Labor",                 material: "3.302 Cast-in-Place Concrete Material",                 div: "03 Concrete" },
-  "Flatwork":                   { labor: "3.501 Concrete Finishing Labor",                     material: "3.502 Concrete Finishing Material",                     div: "03 Concrete" },
-  // Division 04 — Masonry
-  "Masonry":                    { labor: "4.201 Unit Masonry Labor",                           material: "4.202 Unit Masonry Material",                           div: "04 Masonry" },
-  "Brick":                      { labor: "4.201 Unit Masonry Labor",                           material: "4.202 Unit Masonry Material",                           div: "04 Masonry" },
-  "Stone Masonry":              { labor: "4.301 Stone Masonry Labor",                          material: "4.302 Stone Masonry Material",                          div: "04 Masonry" },
-  "Fireplace":                  { labor: "4.201 Unit Masonry Labor",                           material: "4.202 Unit Masonry Material",                           div: "04 Masonry" },
-  // Division 05 — Metals
-  "Structural Steel":           { labor: "5.101 Structural Steel Framing Labor",               material: "5.102 Structural Steel Framing Material",               div: "05 Metals" },
-  "Steel Framing":              { labor: "5.401 Cold-Formed Metal Framing Labor",              material: "5.402 Cold-Formed Metal Framing Material",              div: "05 Metals" },
-  "Metal Fabrications":         { labor: "5.501 Metal Fabrications Labor",                     material: "5.502 Metal Fabrications Material",                     div: "05 Metals" },
-  // Division 06 — Wood, Plastics & Composites
-  "Framing":                    { labor: "6.101 Rough Carpentry Labor",                        material: "6.102 Rough Carpentry Material",                        div: "06 Woods, Plastics, and Composites" },
-  "Rough Framing":              { labor: "6.101 Rough Carpentry Labor",                        material: "6.102 Rough Carpentry Material",                        div: "06 Woods, Plastics, and Composites" },
-  "Rough Carpentry":            { labor: "6.101 Rough Carpentry Labor",                        material: "6.102 Rough Carpentry Material",                        div: "06 Woods, Plastics, and Composites" },
-  "Finish Carpentry":           { labor: "6.201 Finish Carpentry Labor",                       material: "6.202 Finish Carpentry Material",                       div: "06 Woods, Plastics, and Composites" },
-  "Trim":                       { labor: "6.201 Finish Carpentry Labor",                       material: "6.202 Finish Carpentry Material",                       div: "06 Woods, Plastics, and Composites" },
-  "Millwork":                   { labor: "6.201 Finish Carpentry Labor",                       material: "6.202 Finish Carpentry Material",                       div: "06 Woods, Plastics, and Composites" },
-  "Cabinetry":                  { labor: "12.101 Casework and Millwork Labor",                 material: "12.102 Casework and Millwork Material",                 div: "12 Furnishings" },
-  "Cabinets":                   { labor: "12.101 Casework and Millwork Labor",                 material: "12.102 Casework and Millwork Material",                 div: "12 Furnishings" },
-  "Countertops":                { labor: "12.101 Casework and Millwork Labor",                 material: "12.102 Casework and Millwork Material",                 div: "12 Furnishings" },
-  "Deck":                       { labor: "6.701 Wood Decking and Planking Labor",              material: "6.702 Wood Decking and Planking Material",              div: "06 Woods, Plastics, and Composites" },
-  "Decking":                    { labor: "6.701 Wood Decking and Planking Labor",              material: "6.702 Wood Decking and Planking Material",              div: "06 Woods, Plastics, and Composites" },
-  "Composite Decking":          { labor: "6.501 Composite Materials Labor",                    material: "6.502 Composite Materials Material",                    div: "06 Woods, Plastics, and Composites" },
-  // Division 07 — Thermal & Moisture Protection
-  "Insulation":                 { labor: "7.201 Insulation Labor",                             material: "7.202 Insulation Material",                             div: "07 Thermal and Moisture Protection" },
-  "Spray Foam":                 { labor: "7.201 Insulation Labor",                             material: "7.202 Insulation Material",                             div: "07 Thermal and Moisture Protection" },
-  "Roofing":                    { labor: "7.401 Roofing Systems Labor",                        material: "7.402 Roofing Systems Material",                        div: "07 Thermal and Moisture Protection" },
-  "Metal Roofing":              { labor: "7.401 Roofing Systems Labor",                        material: "7.402 Roofing Systems Material",                        div: "07 Thermal and Moisture Protection" },
-  "Standing Seam":              { labor: "7.401 Roofing Systems Labor",                        material: "7.402 Roofing Systems Material",                        div: "07 Thermal and Moisture Protection" },
-  "Shingles":                   { labor: "7.401 Roofing Systems Labor",                        material: "7.402 Roofing Systems Material",                        div: "07 Thermal and Moisture Protection" },
-  "Waterproofing":              { labor: "7.101 Waterproofing Labor",                          material: "7.102 Waterproofing Material",                          div: "07 Thermal and Moisture Protection" },
-  "Flashing":                   { labor: "7.501 Roof Specialties and Accessories Labor",       material: "7.502 Roof Specialties and Accessories Material",       div: "07 Thermal and Moisture Protection" },
-  "Siding":                     { labor: "7.701 Siding and Exterior Wall Finish Systems Labor", material: "7.702 Siding and Exterior Wall Finish Systems Material", div: "07 Thermal and Moisture Protection" },
-  "Exterior Cladding":          { labor: "7.701 Siding and Exterior Wall Finish Systems Labor", material: "7.702 Siding and Exterior Wall Finish Systems Material", div: "07 Thermal and Moisture Protection" },
-  "Vapor Barrier":              { labor: "7.301 Vapor Retarders Labor",                        material: "7.302 Vapor Retarders Material",                        div: "07 Thermal and Moisture Protection" },
-  "Sealants":                   { labor: "7.801 Sealants and Caulking Labor",                  material: "7.802 Sealants and Caulking Material",                  div: "07 Thermal and Moisture Protection" },
-  "Weather Barrier":            { labor: "7.901 Weather Barriers Labor",                       material: "7.902 Weather Barriers Material",                       div: "07 Thermal and Moisture Protection" },
-  // Division 08 — Openings
-  "Doors":                      { labor: "8.101 Standard Doors Labor",                         material: "8.102 Standard Doors Material",                         div: "08 Openings" },
-  "Exterior Doors":             { labor: "8.101 Standard Doors Labor",                         material: "8.102 Standard Doors Material",                         div: "08 Openings" },
-  "Garage Doors":               { labor: "8.201 Specialty Doors Labor",                        material: "8.202 Specialty Doors Material",                        div: "08 Openings" },
-  "Windows":                    { labor: "8.401 Windows Labor",                                material: "8.402 Windows Material",                                div: "08 Openings" },
-  "Skylights":                  { labor: "8.501 Skylights and Roof Windows Labor",             material: "8.502 Skylights and Roof Windows Material",             div: "08 Openings" },
-  "Hardware":                   { labor: "8.701 Hardware and Fittings Labor",                  material: "8.702 Hardware and Fittings Material",                  div: "08 Openings" },
-  "Doors & Windows":            { labor: "8.101 Standard Doors Labor",                         material: "8.102 Standard Doors Material",                         div: "08 Openings" },
-  // Division 09 — Finishes
-  "Drywall":                    { labor: "9.101 Plaster and Gypsum Board Labor",               material: "9.102 Plaster and Gypsum Board Material",               div: "09 Finishes" },
-  "Gypsum Board":               { labor: "9.101 Plaster and Gypsum Board Labor",               material: "9.102 Plaster and Gypsum Board Material",               div: "09 Finishes" },
-  "Tile":                       { labor: "9.301 Tile and Stone Labor",                         material: "9.302 Tile and Stone Material",                         div: "09 Finishes" },
-  "Tile & Flooring":            { labor: "9.301 Tile and Stone Labor",                         material: "9.302 Tile and Stone Material",                         div: "09 Finishes" },
-  "Hardwood Flooring":          { labor: "9.401 Wood Flooring Labor",                          material: "9.402 Wood Flooring Material",                          div: "09 Finishes" },
-  "LVP":                        { labor: "9.501 Resilient Flooring Labor",                     material: "9.502 Resilient Flooring Material",                     div: "09 Finishes" },
-  "Flooring":                   { labor: "9.501 Resilient Flooring Labor",                     material: "9.502 Resilient Flooring Material",                     div: "09 Finishes" },
-  "Carpet":                     { labor: "9.601 Carpet and Matting Labor",                     material: "9.602 Carpet and Matting Material",                     div: "09 Finishes" },
-  "Painting":                   { labor: "9.801 Painting and Coating Labor",                   material: "9.802 Painting and Coating Material",                   div: "09 Finishes" },
-  "Paint":                      { labor: "9.801 Painting and Coating Labor",                   material: "9.802 Painting and Coating Material",                   div: "09 Finishes" },
-  "Interior Finishes":          { labor: "9.991 Uncategorized Labor",                          material: "9.992 Uncategorized Material",                          div: "09 Finishes" },
-  "Finishes":                   { labor: "9.991 Uncategorized Labor",                          material: "9.992 Uncategorized Material",                          div: "09 Finishes" },
-  // Division 21 — Fire Suppression
-  "Fire Suppression":           { labor: "21.201 Sprinkler Systems Labor",                     material: "21.202 Sprinkler Systems Material",                     div: "21 Fire Suppression" },
-  "Sprinklers":                 { labor: "21.201 Sprinkler Systems Labor",                     material: "21.202 Sprinkler Systems Material",                     div: "21 Fire Suppression" },
-  // Division 22 — Plumbing
-  "Plumbing":                   { labor: "22.101 Piping Systems Labor",                        material: "22.102 Piping Systems Material",                        div: "22 Plumbing" },
-  "Plumbing Fixtures":          { labor: "22.201 Plumbing Fixtures Labor",                     material: "22.202 Plumbing Fixtures Material",                     div: "22 Plumbing" },
-  "Water Heater":               { labor: "22.301 Water Heating Systems Labor",                 material: "22.302 Water Heating Systems Material",                 div: "22 Plumbing" },
-  "Gas Piping":                 { labor: "22.601 Gas Piping Systems Labor",                    material: "22.602 Gas Piping Systems Material",                    div: "22 Plumbing" },
-  // Division 23 — HVAC
-  "HVAC":                       { labor: "23.201 Air Distribution Systems Labor",              material: "23.202 Air Distribution Systems Material",              div: "23 HVAC" },
-  "Mechanical":                 { labor: "23.201 Air Distribution Systems Labor",              material: "23.202 Air Distribution Systems Material",              div: "23 HVAC" },
-  "Heating":                    { labor: "23.301 Central Heating Equipment Labor",             material: "23.302 Central Heating Equipment Material",             div: "23 HVAC" },
-  "Ventilation":                { labor: "23.501 Ventilation Systems Labor",                   material: "23.502 Ventilation Systems Material",                   div: "23 HVAC" },
-  "Mini-Split":                 { labor: "23.401 Cooling Equipment Labor",                     material: "23.402 Cooling Equipment Material",                     div: "23 HVAC" },
-  "Radiant Heat":               { labor: "23.301 Central Heating Equipment Labor",             material: "23.302 Central Heating Equipment Material",             div: "23 HVAC" },
-  // Division 26 — Electrical
-  "Electrical":                 { labor: "26.101 Power Distribution Systems Labor",            material: "26.102 Power Distribution Systems Material",            div: "26 Electrical" },
-  "Wiring":                     { labor: "26.201 Wiring and Cabling Labor",                    material: "26.202 Wiring and Cabling Material",                    div: "26 Electrical" },
-  "Lighting":                   { labor: "26.301 Lighting Systems Labor",                      material: "26.302 Lighting Systems Material",                      div: "26 Electrical" },
-  "Service Upgrade":            { labor: "26.101 Power Distribution Systems Labor",            material: "26.102 Power Distribution Systems Material",            div: "26 Electrical" },
-  "Low Voltage":                { labor: "26.601 Electrical Controls and Devices Labor",       material: "26.602 Electrical Controls and Devices Material",       div: "26 Electrical" },
-  // Division 31 — Earthwork
-  "Excavation":                 { labor: "31.101 Excavation Labor",                            material: "31.102 Excavation Material",                            div: "31 Earthwork" },
-  "Grading":                    { labor: "31.401 Rough Grading Labor",                         material: "31.402 Rough Grading Material",                         div: "31 Earthwork" },
-  "Earthwork":                  { labor: "31.101 Excavation Labor",                            material: "31.102 Excavation Material",                            div: "31 Earthwork" },
-  "Sitework":                   { labor: "31.101 Excavation Labor",                            material: "31.102 Excavation Material",                            div: "31 Earthwork" },
-  "Site Work":                  { labor: "31.101 Excavation Labor",                            material: "31.102 Excavation Material",                            div: "31 Earthwork" },
-  // Division 32 — Exterior Improvements
-  "Landscaping":                { labor: "32.701 Landscaping Labor",                           material: "32.702 Landscaping Material",                           div: "32 Exterior Improvements" },
-  "Paving":                     { labor: "32.201 Asphalt Paving Labor",                        material: "32.202 Asphalt Paving Material",                        div: "32 Exterior Improvements" },
-  "Driveway":                   { labor: "32.301 Concrete Paving Labor",                       material: "32.302 Concrete Paving Material",                       div: "32 Exterior Improvements" },
-  "Fencing":                    { labor: "32.601 Fences and Gates Labor",                      material: "32.602 Fences and Gates Material",                      div: "32 Exterior Improvements" },
-  "Outdoor Living":             { labor: "32.901 Athletic and Recreation Surfaces Labor",      material: "32.902 Athletic and Recreation Surfaces Material",      div: "32 Exterior Improvements" },
-  "Retaining Wall":             { labor: "31.701 Slope Protection and Retaining Labor",        material: "31.702 Slope Protection and Retaining Material",        div: "31 Earthwork" },
-  // Division 33 — Utilities
-  "Utilities":                  { labor: "33.101 Water Supply Labor",                          material: "33.102 Water Supply Material",                          div: "33 Utilities" },
-  "Water Service":              { labor: "33.101 Water Supply Labor",                          material: "33.102 Water Supply Material",                          div: "33 Utilities" },
-  "Sewer":                      { labor: "33.201 Sanitary Sewer Labor",                        material: "33.202 Sanitary Sewer Material",                        div: "33 Utilities" },
-  "Septic":                     { labor: "33.201 Sanitary Sewer Labor",                        material: "33.202 Sanitary Sewer Material",                        div: "33 Utilities" },
-  "Well":                       { labor: "33.101 Water Supply Labor",                          material: "33.102 Water Supply Material",                          div: "33 Utilities" },
+// Maps estimate section names → CSI division number and full display name
+const CSI_DIV_MAP = {
+  "Permits":                 { num:"00", name:"00 Procurement and Contracting Requirements" },
+  "Design Services":         { num:"00", name:"00 Procurement and Contracting Requirements" },
+  "Engineering":             { num:"00", name:"00 Procurement and Contracting Requirements" },
+  "Bidding":                 { num:"00", name:"00 Procurement and Contracting Requirements" },
+  "Insurance":               { num:"00", name:"00 Procurement and Contracting Requirements" },
+  "General Conditions":      { num:"01", name:"01 General Requirements" },
+  "Project Management":      { num:"01", name:"01 General Requirements" },
+  "Superintendent":          { num:"01", name:"01 General Requirements" },
+  "Temporary Facilities":    { num:"01", name:"01 General Requirements" },
+  "Temporary Utilities":     { num:"01", name:"01 General Requirements" },
+  "Safety":                  { num:"01", name:"01 General Requirements" },
+  "Bonding":                 { num:"01", name:"01 General Requirements" },
+  "Cleanup":                 { num:"01", name:"01 General Requirements" },
+  "Dumpster":                { num:"01", name:"01 General Requirements" },
+  "Contingency":             { num:"01", name:"01 General Requirements" },
+  "Demolition":              { num:"02", name:"02 Existing Conditions" },
+  "Selective Demolition":    { num:"02", name:"02 Existing Conditions" },
+  "Site Survey":             { num:"02", name:"02 Existing Conditions" },
+  "Environmental Remediation":{num:"02", name:"02 Existing Conditions" },
+  "Abatement":               { num:"02", name:"02 Existing Conditions" },
+  "Site Clearing":           { num:"02", name:"02 Existing Conditions" },
+  "Concrete":                { num:"03", name:"03 Concrete" },
+  "Foundation":              { num:"03", name:"03 Concrete" },
+  "Footings":                { num:"03", name:"03 Concrete" },
+  "Slab":                    { num:"03", name:"03 Concrete" },
+  "Flatwork":                { num:"03", name:"03 Concrete" },
+  "Masonry":                 { num:"04", name:"04 Masonry" },
+  "Brick":                   { num:"04", name:"04 Masonry" },
+  "Stone Masonry":           { num:"04", name:"04 Masonry" },
+  "Fireplace":               { num:"04", name:"04 Masonry" },
+  "Structural Steel":        { num:"05", name:"05 Metals" },
+  "Steel Framing":           { num:"05", name:"05 Metals" },
+  "Metal Fabrications":      { num:"05", name:"05 Metals" },
+  "Framing":                 { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Rough Framing":           { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Rough Carpentry":         { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Finish Carpentry":        { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Trim":                    { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Millwork":                { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Deck":                    { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Decking":                 { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Composite Decking":       { num:"06", name:"06 Woods, Plastics, and Composites" },
+  "Insulation":              { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Spray Foam":              { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Roofing":                 { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Metal Roofing":           { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Standing Seam":           { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Shingles":                { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Waterproofing":           { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Flashing":                { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Siding":                  { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Exterior Cladding":       { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Vapor Barrier":           { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Sealants":                { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Weather Barrier":         { num:"07", name:"07 Thermal and Moisture Protection" },
+  "Doors":                   { num:"08", name:"08 Openings" },
+  "Exterior Doors":          { num:"08", name:"08 Openings" },
+  "Garage Doors":            { num:"08", name:"08 Openings" },
+  "Windows":                 { num:"08", name:"08 Openings" },
+  "Skylights":               { num:"08", name:"08 Openings" },
+  "Hardware":                { num:"08", name:"08 Openings" },
+  "Doors & Windows":         { num:"08", name:"08 Openings" },
+  "Drywall":                 { num:"09", name:"09 Finishes" },
+  "Gypsum Board":            { num:"09", name:"09 Finishes" },
+  "Tile":                    { num:"09", name:"09 Finishes" },
+  "Tile & Flooring":         { num:"09", name:"09 Finishes" },
+  "Hardwood Flooring":       { num:"09", name:"09 Finishes" },
+  "LVP":                     { num:"09", name:"09 Finishes" },
+  "Flooring":                { num:"09", name:"09 Finishes" },
+  "Carpet":                  { num:"09", name:"09 Finishes" },
+  "Painting":                { num:"09", name:"09 Finishes" },
+  "Paint":                   { num:"09", name:"09 Finishes" },
+  "Interior Finishes":       { num:"09", name:"09 Finishes" },
+  "Finishes":                { num:"09", name:"09 Finishes" },
+  "Appliances":              { num:"11", name:"11 Equipment" },
+  "Cabinetry":               { num:"12", name:"12 Furnishings" },
+  "Cabinets":                { num:"12", name:"12 Furnishings" },
+  "Countertops":             { num:"12", name:"12 Furnishings" },
+  "Casework":                { num:"12", name:"12 Furnishings" },
+  "Furniture":               { num:"12", name:"12 Furnishings" },
+  "Window Treatments":       { num:"12", name:"12 Furnishings" },
+  "Fire Suppression":        { num:"21", name:"21 Fire Suppression" },
+  "Sprinklers":              { num:"21", name:"21 Fire Suppression" },
+  "Plumbing":                { num:"22", name:"22 Plumbing" },
+  "Plumbing Fixtures":       { num:"22", name:"22 Plumbing" },
+  "Water Heater":            { num:"22", name:"22 Plumbing" },
+  "Gas Piping":              { num:"22", name:"22 Plumbing" },
+  "HVAC":                    { num:"23", name:"23 HVAC" },
+  "Mechanical":              { num:"23", name:"23 HVAC" },
+  "Heating":                 { num:"23", name:"23 HVAC" },
+  "Ventilation":             { num:"23", name:"23 HVAC" },
+  "Mini-Split":              { num:"23", name:"23 HVAC" },
+  "Radiant Heat":            { num:"23", name:"23 HVAC" },
+  "Electrical":              { num:"26", name:"26 Electrical" },
+  "Wiring":                  { num:"26", name:"26 Electrical" },
+  "Lighting":                { num:"26", name:"26 Electrical" },
+  "Service Upgrade":         { num:"26", name:"26 Electrical" },
+  "Low Voltage":             { num:"26", name:"26 Electrical" },
+  "Excavation":              { num:"31", name:"31 Earthwork" },
+  "Grading":                 { num:"31", name:"31 Earthwork" },
+  "Earthwork":               { num:"31", name:"31 Earthwork" },
+  "Sitework":                { num:"31", name:"31 Earthwork" },
+  "Site Work":               { num:"31", name:"31 Earthwork" },
+  "Retaining Wall":          { num:"31", name:"31 Earthwork" },
+  "Landscaping":             { num:"32", name:"32 Exterior Improvements" },
+  "Paving":                  { num:"32", name:"32 Exterior Improvements" },
+  "Driveway":                { num:"32", name:"32 Exterior Improvements" },
+  "Fencing":                 { num:"32", name:"32 Exterior Improvements" },
+  "Outdoor Living":          { num:"32", name:"32 Exterior Improvements" },
+  "Utilities":               { num:"33", name:"33 Utilities" },
+  "Water Service":           { num:"33", name:"33 Utilities" },
+  "Sewer":                   { num:"33", name:"33 Utilities" },
+  "Septic":                  { num:"33", name:"33 Utilities" },
+  "Well":                    { num:"33", name:"33 Utilities" }
 };
 
-// Lookup function — returns {labor, material, div} for a section name
-function getBtInfo(name){
-  if(BT_MAP[name]) return BT_MAP[name];
-  const key = Object.keys(BT_MAP).find(k =>
+function getCSIDiv(name){
+  if(!name) return { num:"01", name:"01 General Requirements" };
+  if(CSI_DIV_MAP[name]) return CSI_DIV_MAP[name];
+  const key = Object.keys(CSI_DIV_MAP).find(k =>
     name.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(name.toLowerCase())
   );
-  return key ? BT_MAP[key] : { labor: "1.991 Uncategorized Labor", material: "1.992 Uncategorized Material", div: "01 General Requirements" };
+  return key ? CSI_DIV_MAP[key] : { num:"01", name:"01 General Requirements" };
 }
 
-// Keep legacy getCsiInfo for any old references
-function getCsiInfo(name){
-  const bt = getBtInfo(name);
-  const divNum = bt.div.split(' ')[0];
-  return { csi: divNum + " 00 00", bt: bt.labor.replace(' Labor','') };
+// Trades CMB self-performs (splits into Labor + Material rows in Excel)
+const SELF_PERFORM_TRADES = [
+  "Demolition", "Selective Demolition",
+  "Framing", "Rough Framing", "Rough Carpentry",
+  "Finish Carpentry", "Trim", "Millwork",
+  "Project Management", "Superintendent", "General Conditions",
+  "Cleanup", "Dumpster", "Temporary Facilities",
+  "Deck", "Decking", "Composite Decking",
+  "Doors", "Exterior Doors", "Hardware", "Doors & Windows",
+  "Siding", "Exterior Cladding",
+  "Windows"
+];
+
+function isSelfPerform(sectionName){
+  if(!sectionName) return false;
+  const lower = sectionName.toLowerCase();
+  return SELF_PERFORM_TRADES.some(t =>
+    lower.includes(t.toLowerCase()) || t.toLowerCase().includes(lower)
+  );
 }
 
+function getExampleCodesForSection(name){
+  const div = getCSIDiv(name).num;
+  const examples = {
+    "00": ["0.101 Permits and Approvals Labor", "0.203 Design and Pre-Construction Services Subcontractor"],
+    "01": ["1.101 Project Administration and General Office Labor", "1.201 Project Personnel Costs Labor", "1.901 Cleaning and Site Maintenance Labor", "1.902 Cleaning and Site Maintenance Material"],
+    "02": ["2.201 Demolition and Removal Labor", "2.202 Demolition and Removal Material"],
+    "03": ["3.301 Cast-in-Place Concrete Labor", "3.302 Cast-in-Place Concrete Material", "3.303 Cast-in-Place Concrete Subcontractor"],
+    "06": ["6.101 Rough Carpentry Labor", "6.102 Rough Carpentry Material", "6.201 Finish Carpentry Labor", "6.202 Finish Carpentry Material"],
+    "07": ["7.201 Insulation Subcontractor", "7.401 Roofing Systems Subcontractor", "7.701 Siding and Exterior Wall Finish Systems Labor", "7.702 Siding and Exterior Wall Finish Systems Material"],
+    "08": ["8.101 Standard Doors Labor", "8.102 Standard Doors Material", "8.401 Windows Labor", "8.402 Windows Material"],
+    "09": ["9.103 Plaster and Gypsum Board Subcontractor", "9.303 Tile and Stone Subcontractor", "9.503 Resilient Flooring Subcontractor", "9.803 Painting and Coating Subcontractor"],
+    "11": ["11.202 Residential and Hospitality Fixtures Material", "11.203 Residential and Hospitality Fixtures Subcontractor"],
+    "12": ["12.103 Casework and Millwork Subcontractor", "12.203 Furniture Subcontractor"],
+    "22": ["22.103 Piping Systems Subcontractor", "22.203 Plumbing Fixtures Subcontractor"],
+    "23": ["23.203 Air Distribution Systems Subcontractor", "23.303 Central Heating Equipment Subcontractor"],
+    "26": ["26.103 Power Distribution Systems Subcontractor", "26.203 Wiring and Cabling Subcontractor", "26.303 Lighting Systems Subcontractor"],
+    "31": ["31.103 Excavation Subcontractor", "31.403 Rough Grading Subcontractor"],
+    "32": ["32.203 Asphalt Paving Subcontractor", "32.703 Landscaping Subcontractor"],
+    "33": ["33.103 Water Supply Subcontractor", "33.203 Sanitary Sewer Subcontractor"]
+  };
+  return (examples[div] || examples["01"]).join("\n  ");
+}
+
+
+// ── Buildertrend v2 import builder ─────────────────────────────────────
+// Detects old-format line items (missing costCode/costType) — caller regenerates when true.
+function lineItemsLookStale(items){
+  if(!items || !items.length) return true;
+  const first = items[0];
+  return !(first.costCode && first.costType);
+}
+
+async function ensureLineItemsForExport(est, onStatus){
+  for(let i=0; i<(est.sections||[]).length; i++){
+    const section = est.sections[i];
+    if(!section.lineItems || section.lineItems.length === 0 || lineItemsLookStale(section.lineItems)){
+      if(onStatus) onStatus(`Generating line items for ${section.name}...`);
+      const sectionDiv = getCSIDiv(section.name);
+      const sectionIsSelfPerform = isSelfPerform(section.name);
+      const highTotal = section.high || 0;
+
+      const prompt = `Generate line items for the "${section.name}" section of a construction estimate in Flathead Valley, Montana.
+
+TARGET TOTAL: $${highTotal.toLocaleString()} (Quantity × Unit Cost should sum to this high-side number)
+CSI DIVISION: ${sectionDiv.name}
+SELF-PERFORM: ${sectionIsSelfPerform ? "YES — split each item into Labor + Material rows" : "NO — use single Subcontractor rows"}
+
+SELF-PERFORM RULE:
+- If self-perform YES: every work item gets TWO rows — one "Labor" (qty in HR, unit cost is CMB rate $85/$100/$130) and one "Material" (qty in SF/LF/EA/LS, unit cost is material only).
+- If self-perform NO: every work item gets ONE row, costType="Subcontractor", qty in SF/LF/EA/LS/LOT, unit cost is the all-in sub price.
+- Exception within self-perform: PM, Supervision, Permits, Insurance can be Labor-only (no Material row).
+- Exception within non-self-perform: Appliances, Fixtures, and pure-material allowances can be Material-only rows.
+
+ALLOWANCE RULE:
+Set markedAs="Allowance" when EITHER:
+  (a) client selection is still TBD (appliances, fixtures, countertop material, tile style, lights, flooring style), OR
+  (b) it's a lump-sum carry (permits, A&E, septic design, well design)
+Otherwise leave markedAs empty string "".
+
+CSI CODE RULE: costCode must be a valid code in division ${sectionDiv.num} ending in:
+  "01" (for Labor), "02" (for Material), or "03" (for Subcontractor)
+Examples for this section:
+  ${getExampleCodesForSection(section.name)}
+
+DESCRIPTION RULE: Write a short 5-12 word description of what the line covers (e.g., "Remove existing uppers and lowers", "Prime + 2 coats, walls and ceiling").
+
+Generate 8-12 line items. Sum of (qty × unitCost) across all items must equal $${highTotal.toLocaleString()} (±5% tolerance).
+
+Return ONLY this JSON array:
+[{"title":"short trade name","description":"5-12 word desc","costCode":"X.YZZ Full Code Name","quantity":0,"unit":"SF|LF|EA|LS|HR|LOT","unitCost":0,"costType":"Labor|Material|Subcontractor","markedAs":""}]`;
+
+      const models = ["claude-haiku-4-5-20251001","claude-sonnet-4-20250514"];
+      let gotItems = null;
+      for(let attempt=0; attempt<models.length && !gotItems; attempt++){
+        try {
+          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              model: models[attempt], max_tokens: 2000,
+              system: "You are a construction estimator in Flathead Valley, Montana. Return ONLY a valid JSON array. No markdown, no prose.",
+              messages: [{role:"user", content: prompt}]
+            })
+          });
+          if(!res.ok){
+            if((res.status===529 || res.status===503) && attempt < models.length-1){
+              await new Promise(r=>setTimeout(r, (attempt+1)*2500));
+              continue;
+            }
+            break;
+          }
+          const data = await res.json();
+          if(data.error){
+            const errStr = JSON.stringify(data.error);
+            if((errStr.includes("overloaded") || errStr.includes("rate_limit")) && attempt < models.length-1){
+              await new Promise(r=>setTimeout(r, (attempt+1)*2500));
+              continue;
+            }
+            break;
+          }
+          let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+          const start = raw.indexOf("["), end = raw.lastIndexOf("]");
+          if(start!==-1 && end!==-1){
+            gotItems = JSON.parse(raw.slice(start, end+1));
+          }
+        } catch(e){
+          console.warn(`Line item gen attempt ${attempt+1} failed for ${section.name}:`, e);
+        }
+      }
+      if(gotItems) est.sections[i].lineItems = gotItems;
+    }
+  }
+}
+
+function buildBTWorkbook(est){
+  const wb = XLSX.utils.book_new();
+  const marginPct = appData.marginPercent || 20;
+
+  const rows = [];
+  (est.sections||[]).forEach(section => {
+    const div = getCSIDiv(section.name);
+    (section.lineItems||[]).forEach(item => {
+      rows.push({
+        category: div.name,
+        costCode: item.costCode || "",
+        title: item.title || item.description || section.name,
+        description: item.description || "",
+        quantity: item.quantity || item.qty || 1,
+        unit: item.unit || "LS",
+        unitCost: item.unitCost || 0,
+        costType: item.costType || (isSelfPerform(section.name) ? "Labor" : "Subcontractor"),
+        markedAs: item.markedAs || "",
+        csiNum: parseInt(div.num, 10) || 99
+      });
+    });
+  });
+
+  if(est.generalConditions && est.generalConditions.items && est.generalConditions.items.length){
+    const div = getCSIDiv("General Conditions");
+    est.generalConditions.items.forEach(gc => {
+      rows.push({
+        category: div.name,
+        costCode: gc.costCode || "1.101 Project Administration and General Office Labor",
+        title: gc.name || gc.title || "General Conditions Item",
+        description: gc.description || "",
+        quantity: gc.quantity || gc.qty || 1,
+        unit: gc.unit || "LS",
+        unitCost: gc.unitCost || gc.high || 0,
+        costType: gc.costType || "Labor",
+        markedAs: gc.markedAs || "",
+        csiNum: parseInt(div.num, 10) || 99
+      });
+    });
+  }
+
+  rows.sort((a,b) => a.csiNum - b.csiNum);
+
+  const headers = ["Category","Cost Code","Title","Description","Quantity","Unit","Unit Cost","Cost Type","Marked As","Builder Cost","Markup","Markup Type","Client Price","Margin","Profit"];
+  const aoa = [headers];
+
+  rows.forEach(r => {
+    aoa.push([
+      r.category, r.costCode, r.title, r.description,
+      r.quantity, r.unit, r.unitCost, r.costType, r.markedAs,
+      null, marginPct, "%", null, null, null
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:42},{wch:48},{wch:32},{wch:42},{wch:11},{wch:8},{wch:13},
+    {wch:15},{wch:13},{wch:14},{wch:10},{wch:13},{wch:14},{wch:11},{wch:13}
+  ];
+
+  for(let i = 0; i < rows.length; i++){
+    const r = i + 2;
+    ws[`J${r}`] = { t:'n', f:`E${r}*G${r}`, z:'"$"#,##0.00' };
+    ws[`M${r}`] = { t:'n', f:`J${r}*(1+K${r}/100)`, z:'"$"#,##0.00' };
+    ws[`O${r}`] = { t:'n', f:`M${r}-J${r}`, z:'"$"#,##0.00' };
+    ws[`N${r}`] = { t:'n', f:`IF(M${r}=0,0,O${r}/M${r})`, z:'0.00%' };
+    if(ws[`E${r}`]) ws[`E${r}`].z = '#,##0.00';
+    if(ws[`G${r}`]) ws[`G${r}`].z = '"$"#,##0.00';
+    if(ws[`K${r}`]) ws[`K${r}`].z = '0.00';
+  }
+
+  for(let c = 0; c < headers.length; c++){
+    const cellRef = XLSX.utils.encode_cell({r:0, c});
+    if(ws[cellRef]) ws[cellRef].s = { font: { bold: true } };
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+  return wb;
+}
 
 async function exportExcel(){
   const d = appData;
   const est = d.estimate;
   if(!est){ alert("Generate estimate first"); return; }
-  
+
   const btn = event.target;
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = "⏳ Generating Excel...";
-  
+
   try {
-    // ── STEP 1: Auto-generate ALL line items for sections that don't have them ──
-    for(let i=0; i<(est.sections||[]).length; i++){
-      const section = est.sections[i];
-      if(!section.lineItems || section.lineItems.length === 0){
-        btn.textContent = `⏳ Generating line items for ${section.name}...`;
-        
-        const z = appData.zones[0];
-        const projectSummary = `${z.type||"Project"} ${z.sqft||""}SF`;
-        const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
-Project: ${projectSummary}
-Section total: $${section.low.toLocaleString()} – $${section.high.toLocaleString()}
-CSI: ${section.csiCode || getCsiInfo(section.name).csi}
+    await ensureLineItemsForExport(est, (msg) => { btn.textContent = "⏳ " + msg; });
 
-Use CMB labor rates: Carpenter $85/hr, Project Foreman $100/hr, Project Manager $130/hr.
-For each line item calculate:
-- hours = estimated labor hours for that qty (e.g. 72 hours to frame 1200 SF at 0.06 hrs/SF)
-- laborRate = dollar rate used (85, 100, or 130)
-- laborRateType = "Carpenter", "Foreman", or "PM"
-- laborUnit = hours/qty x laborRate (labor cost per unit)
-- materialUnit = material only cost per unit
-- unitCost = laborUnit + materialUnit
-- laborTotal = hours x laborRate
-- materialTotal = qty x materialUnit
-- total = laborTotal + materialTotal
-Include 20% O&P in all prices.
-
-Return ONLY this JSON array (4-8 realistic line items):
-[{"description":"item name","unit":"SF","qty":1,"hours":0,"laborRate":85,"laborRateType":"Carpenter","laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
-
-        try {
-          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({
-              model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. CMB labor rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Use these rates to calculate laborUnit (labor cost per unit = hours per unit x rate). materialUnit = material cost per unit. unitCost = laborUnit + materialUnit. laborTotal = qty x laborUnit. materialTotal = qty x materialUnit. total = qty x unitCost. Return ONLY a valid JSON array [ ... ]. No markdown, no extra text.",
-              messages:[{role:"user", content:prompt}]
-            })
-          });
-          if(res.ok){
-            const data = await res.json();
-            let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
-            const start = raw.indexOf("[");
-            const end = raw.lastIndexOf("]");
-            if(start!==-1 && end!==-1){
-              const items = JSON.parse(raw.slice(start, end+1));
-              est.sections[i].lineItems = items;
-            }
-          }
-        } catch(e){
-          console.warn(`Failed to generate line items for ${section.name}:`, e);
-        }
-      }
-    }
-    
-    // ── STEP 2: Build Excel workbook with SheetJS ──
     btn.textContent = "⏳ Building Excel file...";
-    
-    const wb = XLSX.utils.book_new();
-    const wsData = [];
-    const z = appData.zones[0];
-    
-    // ── PROJECT INFORMATION HEADER ──
-    wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
-    wsData.push([]);
-    if(appData.davisBacon){
-      wsData.push(["*** DAVIS-BACON PREVAILING WAGE PROJECT ***"]);
-      wsData.push(["Wage rates per DOL Flathead County, MT determination"]);
-      wsData.push([]);
-    }
-    wsData.push(["Client:", d.clientName||""]);
-    wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT ${d.clientZip||""}`]);
-    wsData.push(["Date:", new Date().toLocaleDateString()]);
-    wsData.push(["Rep:", d.repName||""]);
-    wsData.push(["Total Budget Range:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
-    wsData.push([]);
-    
-    // ── PROJECT SUMMARY ──
-    wsData.push(["PROJECT SUMMARY"]);
-    wsData.push(["Project Type", "Sq Ft", "Budget Low", "Budget High", "Notes"]);
-    wsData.push([
-      z.type||"",
-      z.sqft||"",
-      est.zones[0]?.low||0,
-      est.zones[0]?.high||0,
-      est.zones[0]?.notes||""
-    ]);
-    wsData.push([]);
-    wsData.push([]);
-    
-    // ── DETAILED COST BREAKDOWN ──
-    wsData.push(["DETAILED COST BREAKDOWN"]);
-    wsData.push([]);
-    wsData.push(["Item Description", "BT Cost Code", "Division", "Unit", "Qty", "Hours", "Labor Rate", "Rate Type", "Labor $/Unit", "Mat $/Unit", "Total $/Unit", "Labor Total", "Mat Total", "Line Total"]);
-    
-    // Trade sections
-    (est.sections||[]).forEach(section => {
-      
-      // Section header row
-      wsData.push([section.name.toUpperCase(), getBtInfo(section.name).labor.replace(" Labor",""), getBtInfo(section.name).div, "", "", "", "", "", "", "", "", "", "", ""]);
-      
-      // Line items
-      if(section.lineItems && section.lineItems.length){
-        section.lineItems.forEach(item => {
-          const bt = getBtInfo(section.name);
-          if((item.laborTotal||0) > 0){
-            wsData.push([
-              "  " + (item.description||"") + " — Labor",
-              bt.labor, bt.div, "HR",
-              item.hours||0, item.hours||0, item.laborRate||85, item.laborRateType||"Carpenter",
-              item.laborUnit||0, 0, item.laborUnit||0, item.laborTotal||0, 0, item.laborTotal||0
-            ]);
-          }
-          if((item.materialTotal||0) > 0){
-            wsData.push([
-              "  " + (item.description||"") + " — Material",
-              bt.material, bt.div, item.unit||"LS",
-              item.qty||1, 0, 0, "",
-              0, item.materialUnit||0, item.materialUnit||0, 0, item.materialTotal||0, item.materialTotal||0
-            ]);
-          }
-        });
-      } else {
-        // Fallback if line items failed to generate
-        const btFb = getBtInfo(section.name);
-        wsData.push([
-          "  " + section.name,
-          btFb.labor, btFb.div, "LS", 1, 0, 0, "", 0, 0, section.low||0, 0, 0, section.low||0
-        ]);
-      }
-      
-      // Section total row (14 cols)
-      wsData.push(["", "", "", "", "", "", "", "", "", "", "", "", "Section Total:", section.low||0]);
-      wsData.push([]); // Blank row
-    });
-    
-    // ── GENERAL CONDITIONS ──
-    wsData.push(["GENERAL CONDITIONS (" + (est.gcMonths||3) + " months)"]);
-    const gcItems = est.generalConditions?.items || [];
-    if(gcItems.length){
-      gcItems.forEach(item => {
-        wsData.push([
-          "  " + (item.name||""),
-          "1.101 Project Administration and General Office Labor",
-          "01 General Requirements",
-          "LS", item.qty||1, 0, 0, "",
-          0, 0, item.low||0, 0, 0, item.low||0
-        ]);
-      });
-    }
-    wsData.push(["", "", "", "", "", "", "", "", "", "", "", "", "GC Total:", est.gcLow||0]);
-    wsData.push([]);
-    wsData.push([]);
-    
-    // ── PROJECT TOTALS ──
-    const marginPct = appData.marginPercent || 20;
-    const bareSubtotal = est.subtotalLow||0;
-    const gcTotal = est.gcLow||0;
-    const bareCost = bareSubtotal + gcTotal;
-    const marginAmt = Math.round(bareCost * (marginPct / 100));
-    wsData.push(["PROJECT TOTALS"]);
-    wsData.push(["Construction Subtotal (Labor + Material)", "", "", "", "", "", "", "", "", "", "", "", "", bareSubtotal]);
-    wsData.push(["General Conditions", "", "", "", "", "", "", "", "", "", "", "", "", gcTotal]);
-    wsData.push(["SUBTOTAL (Bare Cost)", "", "", "", "", "", "", "", "", "", "", "", "", bareCost]);
-    wsData.push([`Builder's Margin (${marginPct}%)`, "", "", "", "", "", "", "", "", "", "", "", "", marginAmt]);
-    wsData.push(["", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
-    wsData.push(["TOTAL PROJECT COST", "", "", "", "", "", "", "", "", "", "", "", "", bareCost + marginAmt]);
-    wsData.push([]);
-    wsData.push(["NOTE: 20% O&P is included in all unit rates above. Builder's Margin shown is the same 20% for reference/adjustment."]);
+    const wb = buildBTWorkbook(est);
 
-    // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
-    // Set column widths
-    ws['!cols'] = [
-      {wch: 42}, // Item Description
-      {wch: 38}, // BT Cost Code
-      {wch: 32}, // Division
-      {wch: 6},  // Unit
-      {wch: 6},  // Qty
-      {wch: 6},  // Hours
-      {wch: 10}, // Labor Rate
-      {wch: 12}, // Rate Type
-      {wch: 12}, // Labor $/Unit
-      {wch: 12}, // Mat $/Unit
-      {wch: 12}, // Total $/Unit
-      {wch: 12}, // Labor Total
-      {wch: 12}, // Mat Total
-      {wch: 12}  // Line Total
-    ];
-    
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Estimate");
-    
-    // Generate Excel file and download
     const dt = new Date().toLocaleDateString().replace(/\//g,"-");
     const filename = (d.clientName||"CMB").replace(/\s+/g,"_") + "_" + dt + "_Estimate.xlsx";
     XLSX.writeFile(wb, filename);
-    
+
     btn.textContent = originalText;
     btn.disabled = false;
-    
   } catch(e){
     alert("Export failed: " + e.message);
     console.error(e);
@@ -1668,7 +1672,7 @@ async function generateProposalBlob(){
   <h1>Cost Breakdown by Trade</h1>
   <table><thead><tr><th>Trade Section</th><th>BT Cost Code</th><th style="text-align:right">Low</th><th style="text-align:right">High</th></tr></thead>
   <tbody>
-  ${(est.sections||[]).map(s=>{const bt=getBtInfo(s.name);return`<tr><td>${esc(s.name)}</td><td style="font-size:10pt;color:#666">${esc(bt.labor.replace(' Labor',''))}</td><td style="text-align:right">${fmt$(s.low||0)}</td><td style="text-align:right">${fmt$(s.high||0)}</td></tr>`;}).join('')}
+  ${(est.sections||[]).map(s=>{const div=getCSIDiv(s.name);return`<tr><td>${esc(s.name)}</td><td style="font-size:10pt;color:#666">${esc(div.name)}</td><td style="text-align:right">${fmt$(s.low||0)}</td><td style="text-align:right">${fmt$(s.high||0)}</td></tr>`;}).join('')}
   <tr style="border-top:2px solid #B87333"><td colspan="2"><strong>Construction Subtotal</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalHigh||0)}</strong></td></tr>
   <tr><td colspan="2">General Conditions</td><td style="text-align:right">${fmt$(est.gcLow||0)}</td><td style="text-align:right">${fmt$(est.gcHigh||0)}</td></tr>
   <tr class="total-row" style="border-top:2px solid #B87333"><td colspan="2"><strong>TOTAL PROJECT COST</strong></td><td style="text-align:right"><strong>${fmt$(est.totalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.totalHigh||0)}</strong></td></tr>
@@ -1681,91 +1685,8 @@ async function generateExcelBlob(){
   const d = appData; const est = d.estimate;
   if(!est) return null;
   try {
-    for(let i=0; i<(est.sections||[]).length; i++){
-      const section = est.sections[i];
-      if(!section.lineItems || section.lineItems.length === 0){
-        const z = appData.zones[0];
-        const projectSummary = `${z.type||"Project"} ${z.sqft||""}SF`;
-        const prompt = `Generate detailed line items for the "${section.name}" section of a Montana construction estimate.
-Project: ${projectSummary}. Section total: $${section.low.toLocaleString()}.
-BT Cost Code: ${getBtInfo(section.name).labor}
-Use CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr.
-For each item: hours=total labor hours, laborRate=85/100/130, laborRateType=Carpenter/Foreman/PM, laborUnit=hours/qty*rate, materialUnit=material cost/unit, unitCost=laborUnit+materialUnit, laborTotal=hours*rate, materialTotal=qty*materialUnit, total=laborTotal+materialTotal. Include 20% O&P.
-Return ONLY JSON array (4-6 items):
-[{"description":"item","unit":"SF","qty":1,"hours":0,"laborRate":85,"laborRateType":"Carpenter","laborUnit":0,"materialUnit":0,"unitCost":0,"laborTotal":0,"materialTotal":0,"total":0}]`;
-        try {
-          const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:1500,
-              system:"You are a construction estimator in Flathead Valley Montana. CMB rates: Carpenter $85/hr, Foreman $100/hr, PM $130/hr. Return ONLY valid JSON array. No markdown.",
-              messages:[{role:"user", content:prompt}] })
-          });
-          if(res.ok){
-            const data = await res.json();
-            let raw = data.content[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
-            const start = raw.indexOf("["), end = raw.lastIndexOf("]");
-            if(start!==-1 && end!==-1) est.sections[i].lineItems = JSON.parse(raw.slice(start, end+1));
-          }
-        } catch(e){ console.warn(`Line items failed for ${section.name}:`, e); }
-      }
-    }
-    const wb = XLSX.utils.book_new();
-    const wsData = [];
-    const z = appData.zones[0];
-    wsData.push(["COPPER MOUNTAIN BUILDERS - CONCEPTUAL ESTIMATE"]);
-    wsData.push([]);
-    if(appData.davisBacon){
-      wsData.push(["*** DAVIS-BACON PREVAILING WAGE PROJECT ***"]);
-      wsData.push(["Wage rates per DOL Flathead County, MT determination"]);
-      wsData.push([]);
-    }
-    wsData.push(["Client:", d.clientName||""]);
-    wsData.push(["Project Address:", `${d.projectAddress||""}, ${d.projectCity||""}, MT`]);
-    wsData.push(["Date:", new Date().toLocaleDateString()]);
-    wsData.push(["Rep:", d.repName||""]);
-    wsData.push(["Total Budget:", `${fmt$(est.totalLow)} - ${fmt$(est.totalHigh)}`]);
-    wsData.push([]);
-    wsData.push(["PROJECT SUMMARY"]);
-    wsData.push(["Project Type","Sq Ft","Budget Low","Budget High","Notes"]);
-    wsData.push([z.type||"", z.sqft||"", est.zones[0]?.low||0, est.zones[0]?.high||0, est.zones[0]?.notes||""]);
-    wsData.push([]); wsData.push([]);
-    wsData.push(["DETAILED COST BREAKDOWN"]); wsData.push([]);
-    wsData.push(["Item Description","BT Cost Code","Division","Unit","Qty","Hours","Labor Rate","Rate Type","Labor $/Unit","Mat $/Unit","Total $/Unit","Labor Total","Mat Total","Line Total"]);
-    (est.sections||[]).forEach(section => {
-      const bt = getBtInfo(section.name);
-      wsData.push([section.name.toUpperCase(), bt.labor.replace(" Labor",""), bt.div, "","","","","","","","","","",""]);
-      if(section.lineItems && section.lineItems.length){
-        section.lineItems.forEach(item => {
-          if((item.laborTotal||0) > 0) wsData.push(["  "+(item.description||"")+" — Labor", bt.labor, bt.div, "HR", item.hours||0, item.hours||0, item.laborRate||85, item.laborRateType||"Carpenter", item.laborUnit||0, 0, item.laborUnit||0, item.laborTotal||0, 0, item.laborTotal||0]);
-          if((item.materialTotal||0) > 0) wsData.push(["  "+(item.description||"")+" — Material", bt.material, bt.div, item.unit||"LS", item.qty||1, 0, 0, "", 0, item.materialUnit||0, item.materialUnit||0, 0, item.materialTotal||0, item.materialTotal||0]);
-        });
-      } else {
-        wsData.push(["  "+section.name, bt.labor, bt.div, "LS", 1, 0, 0, "", 0, 0, section.low||0, 0, 0, section.low||0]);
-      }
-      wsData.push(["","","","","","","","","","","","","Section Total:", section.low||0]);
-      wsData.push([]);
-    });
-    wsData.push(["GENERAL CONDITIONS ("+( est.gcMonths||3)+" months)"]);
-    wsData.push(["  General Conditions", "1.101 Project Administration and General Office Labor", "01 General Requirements", "LS", 1, 0, 0, "", 0, 0, est.gcLow||0, 0, 0, est.gcLow||0]);
-    wsData.push(["","","","","","","","","","","","","GC Total:", est.gcLow||0]);
-    wsData.push([]); wsData.push([]);
-    const marginPct2 = appData.marginPercent || 20;
-    const bareSubtotal2 = est.subtotalLow||0;
-    const gcTotal2 = est.gcLow||0;
-    const bareCost2 = bareSubtotal2 + gcTotal2;
-    const marginAmt2 = Math.round(bareCost2 * (marginPct2 / 100));
-    wsData.push(["PROJECT TOTALS"]);
-    wsData.push(["Construction Subtotal (Labor + Material)","","","","","","","","","","","","", bareSubtotal2]);
-    wsData.push(["General Conditions","","","","","","","","","","","","", gcTotal2]);
-    wsData.push(["SUBTOTAL (Bare Cost)","","","","","","","","","","","","", bareCost2]);
-    wsData.push([`Builder's Margin (${marginPct2}%)`,"","","","","","","","","","","","", marginAmt2]);
-    wsData.push(["","","","","","","","","","","","","",""]);
-    wsData.push(["TOTAL PROJECT COST","","","","","","","","","","","","", bareCost2 + marginAmt2]);
-    wsData.push([]);
-    wsData.push(["NOTE: 20% O&P is included in all unit rates above. Builder's Margin shown is the same 20% for reference/adjustment."]);
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch:42},{wch:38},{wch:32},{wch:6},{wch:6},{wch:6},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
-    XLSX.utils.book_append_sheet(wb, ws, "Estimate");
+    await ensureLineItemsForExport(est);
+    const wb = buildBTWorkbook(est);
     const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
     return new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   } catch(e){ console.error("Excel blob failed:", e); return null; }
