@@ -1887,22 +1887,32 @@ function generateProposalDocument(){
 <body>
   <!-- COVER PAGE -->
   <div class="cover-page">
-    <div class="company-name">${esc(d.company||"COPPER MOUNTAIN BUILDERS").toUpperCase()}</div>
-    <div class="doc-title">CONCEPTUAL DESIGN-BUILD PROPOSAL</div>
-    <div class="cover-info"><strong>Client:</strong> ${esc(d.clientName||"")}</div>
-    <div class="cover-info"><strong>Project:</strong> ${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, MT</div>
-    <div class="cover-info"><strong>Date:</strong> ${dt}</div>
-    <div class="cover-info"><strong>Prepared by:</strong> ${esc(d.repName||"")}</div>
+    <div class="company-name">${esc(d.company||"Copper Mountain Builders")}</div>
+    <div class="doc-title" style="font-size:14pt;font-weight:normal;color:#5C5850;font-style:italic;margin-bottom:60px;">A starting point for the home at<br/>${esc(d.projectAddress||"")}${d.projectCity?", "+esc(d.projectCity)+", Montana":""}</div>
+    <div class="cover-info">Prepared for ${esc(d.clientName||"")}</div>
+    <div class="cover-info" style="font-size:11pt;color:#5C5850;">${dt}</div>
+    <div style="margin-top:60px;font-size:11pt;color:#5C5850;font-style:italic;">By ${esc(d.repName||"Copper Mountain Builders")} · Kalispell, Montana</div>
   </div>
 
-  <!-- EXECUTIVE SUMMARY -->
-  <h1>Executive Summary</h1>
-  ${est.summary ? est.summary.split('\n').map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('') : '<p>No summary available.</p>'}
-  
+  <!-- INTRO LETTER -->
+  <div style="padding:0 0 30px 0;">
+    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(d.clientName.split(/[,&]|and/i)[0].trim())+"," : "Hello,"}</p>
+    <p style="margin-bottom:14px;">Thank you for letting us walk your property and hear what you're imagining for this build. What follows is our shared starting point — what we saw, what we'd build, what it'll cost, and what comes next.</p>
+    <p style="margin-bottom:14px;">Copper Mountain Builders has been doing this work out of Kalispell for years, and my family has been in Montana for six generations. That heritage shapes how we run a job — we listen before we draw a line, we catch problems before they cost you, and we answer the phone whether you're three days into framing or three years into living in the home. This document is a reflection of that approach, applied to your project.</p>
+    <p style="margin-bottom:14px;">Read through it at your own pace. Mark anything that doesn't sit right, anything that gets you excited, anything you want to talk through. Then we'll sit down together and turn this starting point into a plan.</p>
+    <p style="margin-bottom:0;">— ${esc(d.repName||"Matt Farrier")}</p>
+  </div>
+
   <div class="page-break"></div>
 
-  <!-- BUDGET SUMMARY -->
-  <h1>Budget Summary</h1>
+  <!-- WHAT WE'D BUILD -->
+  <h1>What we'd build</h1>
+  ${est.summary ? formatAnalysis(est.summary) : '<p>No summary available.</p>'}
+
+  <div class="page-break"></div>
+
+  <!-- BUDGET -->
+  <h1>Where the money goes</h1>
   <table>
     <thead>
       <tr>
@@ -1945,22 +1955,22 @@ function generateProposalDocument(){
 
   ${est.siteAnalysis ? `
   <div class="page-break"></div>
-  <h1>Site Analysis</h1>
-  <p><em>Based on comprehensive photo analysis of existing conditions:</em></p>
+  <h1>What we saw on site</h1>
+  <p><em>From our walk-through and the photos and documents you shared:</em></p>
   ${formatAnalysis(est.siteAnalysis)}
   ` : ''}
 
   ${est.complianceAnalysis ? `
   <div class="page-break"></div>
-  <h1>Code Compliance & Permitting</h1>
-  <p><em>Comprehensive review of Montana Building Code requirements and Flathead County permitting:</em></p>
+  <h1>Notes on code &amp; permits</h1>
+  <p><em>What Montana Building Code and Flathead County will require for this project:</em></p>
   ${formatAnalysis(est.complianceAnalysis)}
   ` : ''}
 
   ${est.schedule && est.schedule.milestones && est.schedule.milestones.length > 0 ? `
   <div class="page-break"></div>
-  <h1>Construction Schedule</h1>
-  <p><strong>Total Duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
+  <h1>How long this takes</h1>
+  <p><strong>Total duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
   ${est.schedule.designPhase ? `<p><strong>Design Phase:</strong> ${esc(est.schedule.designPhase)}</p>` : ''}
   ${est.schedule.constructionPhase ? `<p><strong>Construction Phase:</strong> ${esc(est.schedule.constructionPhase)}</p>` : ''}
   <div class="section-content">
@@ -1975,7 +1985,7 @@ function generateProposalDocument(){
   ` : ''}
 
   <div class="page-break"></div>
-  <h1>Cost Breakdown by Trade</h1>
+  <h1>By trade</h1>
   <table>
     <thead>
       <tr>
@@ -2530,17 +2540,24 @@ async function generateProposalBlob(){
     .milestone{margin:10px 0 10px 20px;padding-left:20px;border-left:3px solid #B87333}
   </style></head><body>
   <div class="cover-page">
-    <div class="company-name">${esc((d.company||"COPPER MOUNTAIN BUILDERS").toUpperCase())}</div>
-    <div class="doc-title">CONCEPTUAL DESIGN-BUILD PROPOSAL</div>
-    <div class="cover-info"><strong>Client:</strong> ${esc(d.clientName||"")}</div>
-    <div class="cover-info"><strong>Project:</strong> ${esc(d.projectAddress||"")}, ${esc(d.projectCity||"")}, MT</div>
-    <div class="cover-info"><strong>Date:</strong> ${dt}</div>
-    <div class="cover-info"><strong>Prepared by:</strong> ${esc(d.repName||"")}</div>
+    <div class="company-name">${esc(d.company||"Copper Mountain Builders")}</div>
+    <div class="doc-title" style="font-size:14pt;font-weight:normal;color:#5C5850;font-style:italic;margin-bottom:60px;">A starting point for the home at<br/>${esc(d.projectAddress||"")}${d.projectCity?", "+esc(d.projectCity)+", Montana":""}</div>
+    <div class="cover-info">Prepared for ${esc(d.clientName||"")}</div>
+    <div class="cover-info" style="font-size:11pt;color:#5C5850;">${dt}</div>
+    <div style="margin-top:60px;font-size:11pt;color:#5C5850;font-style:italic;">By ${esc(d.repName||"Copper Mountain Builders")} · Kalispell, Montana</div>
   </div>
-  <h1>Executive Summary / Scope of Work</h1>
-  ${est.summary ? est.summary.split('\n').map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('') : '<p>No summary available.</p>'}
+  <div style="padding:0 0 30px 0;">
+    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(d.clientName.split(/[,&]|and/i)[0].trim())+"," : "Hello,"}</p>
+    <p style="margin-bottom:14px;">Thank you for letting us walk your property and hear what you're imagining for this build. What follows is our shared starting point — what we saw, what we'd build, what it'll cost, and what comes next.</p>
+    <p style="margin-bottom:14px;">Copper Mountain Builders has been doing this work out of Kalispell for years, and my family has been in Montana for six generations. That heritage shapes how we run a job — we listen before we draw a line, we catch problems before they cost you, and we answer the phone whether you're three days into framing or three years into living in the home. This document is a reflection of that approach, applied to your project.</p>
+    <p style="margin-bottom:14px;">Read through it at your own pace. Mark anything that doesn't sit right, anything that gets you excited, anything you want to talk through. Then we'll sit down together and turn this starting point into a plan.</p>
+    <p style="margin-bottom:0;">— ${esc(d.repName||"Matt Farrier")}</p>
+  </div>
   <div class="page-break"></div>
-  <h1>Budget Summary</h1>
+  <h1>What we'd build</h1>
+  ${est.summary ? formatAnalysis(est.summary) : '<p>No summary available.</p>'}
+  <div class="page-break"></div>
+  <h1>Where the money goes</h1>
   <table><thead><tr><th>Project Type</th><th style="text-align:right">Sq Ft</th><th style="text-align:right">Budget Low</th><th style="text-align:right">Budget High</th></tr></thead>
   <tbody>
   ${(est.zones||[]).map(z => `<tr><td>${esc(z.name||appData.zones[0]?.type||"")}</td><td style="text-align:right">${appData.zones[0]?.sqft||""}</td><td style="text-align:right">${fmt$(z.low||0)}</td><td style="text-align:right">${fmt$(z.high||0)}</td></tr>`).join('')}
@@ -2549,13 +2566,13 @@ async function generateProposalBlob(){
   <tr class="total-row" style="border-top:2px solid #B87333"><td colspan="2"><strong>TOTAL PROJECT COST</strong></td><td style="text-align:right"><strong>${fmt$(est.totalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.totalHigh||0)}</strong></td></tr>
   </tbody></table>
   <div class="retainer-box">Design Retainer (Non-Refundable): ${fmt$(d.retainerAmount||0)}</div>
-  ${est.siteAnalysis?`<div class="page-break"></div><h1>Site Analysis</h1>${formatAnalysis(est.siteAnalysis)}`:''}
-  ${est.complianceAnalysis?`<div class="page-break"></div><h1>Code Compliance & Permitting</h1>${formatAnalysis(est.complianceAnalysis)}`:''}
-  ${est.schedule&&est.schedule.milestones&&est.schedule.milestones.length>0?`<div class="page-break"></div><h1>Construction Schedule</h1><p><strong>Total Duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
+  ${est.siteAnalysis?`<div class="page-break"></div><h1>What we saw on site</h1>${formatAnalysis(est.siteAnalysis)}`:''}
+  ${est.complianceAnalysis?`<div class="page-break"></div><h1>Notes on code &amp; permits</h1>${formatAnalysis(est.complianceAnalysis)}`:''}
+  ${est.schedule&&est.schedule.milestones&&est.schedule.milestones.length>0?`<div class="page-break"></div><h1>How long this takes</h1><p><strong>Total duration:</strong> ${esc(est.schedule.startToFinish||"TBD")}</p>
   ${(est.schedule.milestones||[]).map(m=>`<div class="milestone"><strong>${esc(m.phase)}</strong> — <em>${esc(m.duration)}</em>${m.notes?`<br>${esc(m.notes)}`:''}</div>`).join('')}`:''}
   <div class="page-break"></div>
-  <h1>Cost Breakdown by Trade</h1>
-  <table><thead><tr><th>Trade Section</th><th>BT Cost Code</th><th style="text-align:right">Low</th><th style="text-align:right">High</th></tr></thead>
+  <h1>By trade</h1>
+  <table><thead><tr><th>Trade Section</th><th>CSI Division</th><th style="text-align:right">Low</th><th style="text-align:right">High</th></tr></thead>
   <tbody>
   ${(est.sections||[]).map(s=>{const div=getCSIDiv(s.name);return`<tr><td>${esc(s.name)}</td><td style="font-size:10pt;color:#666">${esc(div.name)}</td><td style="text-align:right">${fmt$(s.low||0)}</td><td style="text-align:right">${fmt$(s.high||0)}</td></tr>`;}).join('')}
   <tr style="border-top:2px solid #B87333"><td colspan="2"><strong>Construction Subtotal</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalLow||0)}</strong></td><td style="text-align:right"><strong>${fmt$(est.subtotalHigh||0)}</strong></td></tr>
@@ -3081,14 +3098,23 @@ ${appData.projectNotes ? "NOTES: "+appData.projectNotes : ""}
 ${z.notes ? "PROJECT NOTES: "+z.notes : ""}
 ${qaContext ? "Q&A:\n"+qaContext : ""}
 
-PART 1 — SCOPE OF WORK (400-600 words for client):
-Write so a homeowner with no construction background understands exactly what they're getting. Use "we" for CMB. Five sections with ALL CAPS headers:
-YOUR PROJECT — what we saw, what type of work this is
-WHAT'S INCLUDED — clear list, simple terms, verbs first (Install, Remove, Build, Replace)
-WHAT'S NOT INCLUDED — specific exclusions, decisions client still needs to make
-BUDGET CONTEXT — 2-3 sentences on what drives the cost range, Montana factors
-GETTING STARTED — next steps (sign agreement, pay retainer, first meeting)
-TONE: Kitchen-table conversation. No jargon, no hollow adjectives.
+PART 1 — SCOPE OF WORK (450-650 words for client):
+
+VOICE — read this carefully. You are writing on behalf of Copper Mountain Builders, a sixth-generation Montana family business in Kalispell. The voice is warm, neighborly, refined. Listens before it pitches. Catches problems before they cost the homeowner. Answers the phone three years after the build. Speaks the way a builder would speak to a friend over coffee — confident in the craft, gentle in the delivery. Use "we" for CMB. Use the client's first name(s) once near the top if they're known. Avoid hollow adjectives ("luxurious," "stunning"), avoid construction jargon, avoid bullet-list dryness. Write in flowing sentences with short paragraphs.
+
+GROUND THE WRITING IN WHAT WE ACTUALLY SAW AND DISCUSSED. Use the SITE ANALYSIS, NOTES, PROJECT NOTES, and Q&A above as the source of truth — pull specific details from them (the lot size, the existing conditions, what the client said they want, the trades involved). Do NOT invent details that aren't grounded in the inputs. If a section's specifics aren't in the inputs, keep it brief and honest.
+
+Use these five sections in this order, with sentence-case headings exactly as written:
+
+What we saw at your place — Two short paragraphs. The first describes what we observed on site (drawn from SITE ANALYSIS and PROJECT NOTES — lot, layout, existing conditions, anything notable). The second is one sentence acknowledging what the homeowner said they want, in their words where possible.
+
+What we'd build for you — Walk through the project in plain language. Cover each major trade involved (TRADES INCLUDED list), but write it as a story of how the work flows, not a punch list. Make it specific to the project type. The homeowner should finish reading and know exactly what they're getting.
+
+What this proposal doesn't cover yet — Honest exclusions and the decisions still in front of the client (selections, allowances, things outside the current scope). Frame it as "here's what we'll figure out together as we go," not as legal disclaimers.
+
+Why the budget lands where it does — Two or three sentences on what drives the cost range — Flathead Valley pricing, Montana seasonality, materials we'd use, the design choices that move the number. Honest, not defensive.
+
+How we'd start — The next steps in human terms. Signing the design agreement, the retainer, when we'd have our first sit-down. Close with a short, warm line — something a sixth-generation Montanan would actually say. Not "we look forward to partnering with you." Something true.
 
 PART 2 — SCHEDULE:
 Include design phase (10-14 weeks) + construction phase with Montana seasonal constraints.
