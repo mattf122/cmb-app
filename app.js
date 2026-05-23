@@ -79,17 +79,43 @@ const UNIT_COST_DB = {
   "Hardwood flooring":                  { unit:"SF", low:9,     high:18 },
   "LVP flooring":                       { unit:"SF", low:6,     high:11 },
   "Carpet":                             { unit:"SF", low:4,     high:8 },
-  "Kitchen cabinets":                   { unit:"EA", low:24000, high:46000 },
+  "Kitchen cabinets (per LF of run)":   { unit:"LF", low:600,   high:1100 },
   "Bathroom vanity":                    { unit:"EA", low:2500,  high:6000 },
   "Countertop, quartz":                 { unit:"SF", low:65,    high:95 },
   "Countertop, granite":                { unit:"SF", low:55,    high:85 },
   "Shower surround, tiled":             { unit:"EA", low:2500,  high:5000 },
-  "Backsplash":                         { unit:"EA", low:1500,  high:3000 },
+  "Backsplash tile (per SF)":           { unit:"SF", low:28,    high:55 },
   "Selective demolition":               { unit:"SF", low:3,     high:6 },
   "Full gut demolition":                { unit:"SF", low:8,     high:15 },
-  "Sprinkler system":                   { unit:"SF", low:4,     high:8 },
+  "Fire sprinkler system (NFPA 13D)":   { unit:"SF", low:5,     high:9 },
+  "Lawn irrigation system":             { unit:"SF", low:1.50,  high:3.00 },
   "Landscaping basic":                  { unit:"SF", low:1.50,  high:3.00 },
-  "Driveway, concrete":                 { unit:"SF", low:8,     high:14 }
+  "Driveway, concrete":                 { unit:"SF", low:8,     high:14 },
+  // Added 2026-05 from research/unit_cost_audit.json — common CMB scope items missing from v1
+  "Driveway, paved asphalt":            { unit:"SF", low:5,     high:9 },
+  "Driveway, gravel (3/4 minus)":       { unit:"CY", low:35,    high:65 },
+  "ICF foundation wall":                { unit:"SF", low:42,    high:62 },
+  "Helical piers":                      { unit:"EA", low:850,   high:1400 },
+  "Steel beam (W-section, installed)":  { unit:"LF", low:95,    high:160 },
+  "Snow-load engineering uplift":       { unit:"LS", low:1200,  high:3500 },
+  "Well drilling (per LF depth)":       { unit:"LF", low:32,    high:55 },
+  "Septic system, conventional":        { unit:"EA", low:12000, high:22000 },
+  "Septic system, sand mound":          { unit:"EA", low:25000, high:42000 },
+  "Standby generator + transfer switch":{ unit:"EA", low:8500,  high:18000 },
+  "Propane tank set + first fill":      { unit:"EA", low:1800,  high:3500 },
+  "EV charger circuit (240V hardwired)":{ unit:"EA", low:1100,  high:2400 },
+  "Radon mitigation system":            { unit:"EA", low:1400,  high:2400 },
+  "Retaining wall (block, per face SF)":{ unit:"SF", low:32,    high:65 },
+  "Deck framing + composite decking":   { unit:"SF", low:42,    high:75 },
+  "Hardscape pavers":                   { unit:"SF", low:18,    high:38 },
+  "Fence (cedar/vinyl, per LF)":        { unit:"LF", low:32,    high:65 },
+  "Closet system (built-in, per LF)":   { unit:"LF", low:180,   high:380 },
+  "Interior stair build":               { unit:"EA", low:2800,  high:6500 },
+  "Fireplace + chimney (gas)":          { unit:"EA", low:6500,  high:14000 },
+  "Window covering allowance":          { unit:"LS", low:2500,  high:8000 },
+  "Structural engineering (LS)":        { unit:"LS", low:4000,  high:8000 },
+  "Survey (LS)":                        { unit:"LS", low:800,   high:2500 },
+  "Builder's risk insurance (LS)":      { unit:"LS", low:1200,  high:3500 }
 };
 
 function computeEstimateFromTakeoff(takeoffData, marginPercent){
@@ -267,6 +293,21 @@ function updateHeader(){
 // ── Helpers ─────────────────────────────────────────────────────────
 function fmt$(n){ return "$" + Number(n||0).toLocaleString(); }
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+// Extract first name from clientName for warm greetings.
+// Splits on commas, ampersands, " and " (word-boundary), " & ", and "/".
+// "Brandon Hartwell" -> "Brandon" (not "Br" — old regex broke on letters "and").
+// "John & Sarah Thompson" -> "John"
+// "John and Sarah" -> "John"
+// "Thompson LLC" -> "Thompson" (whole first word — LLC handled separately)
+function firstNameFromClient(name){
+  if(!name) return "";
+  // Split on real separators: comma, ampersand, " and " (with spaces), " / "
+  const parts = String(name).split(/,|&| and | \/ /i);
+  const first = (parts[0]||"").trim();
+  // First word of the first part = first name
+  return first.split(/\s+/)[0] || first;
+}
 function today(){ return new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}); }
 function fileToDataURL(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(file); }); }
 
@@ -1322,13 +1363,20 @@ async function ensureLineItemsForExport(est, onStatus){
 
       const prompt = `Generate line items for the "${section.name}" section of a construction estimate in Flathead Valley, Montana.
 
-TARGET TOTAL: $${highTotal.toLocaleString()} (Quantity × Unit Cost should sum to this high-side number)
+TARGET BUILDER COST TOTAL: $${highTotal.toLocaleString()} — Quantity × Unit Cost across all items must sum to this number.
+
+ALL UNIT COSTS ARE BUILDER COST (BARE COST) — what CMB actually pays:
+- For Subcontractor rows: the price CMB pays the sub (their installed quote — which already includes the sub's own profit, but NOT CMB's 20% margin).
+- For Labor rows: CMB's billing rate × hours ($85 Carpenter, $100 Foreman, $130 PM).
+- For Material rows: material-only cost CMB pays the supplier.
+- DO NOT add CMB's 20% margin into the Unit Cost. The Excel writer adds it in a separate Markup column.
+
 CSI DIVISION: ${sectionDiv.name}
 SELF-PERFORM: ${sectionIsSelfPerform ? "YES — split each item into Labor + Material rows" : "NO — use single Subcontractor rows"}
 
 SELF-PERFORM RULE:
-- If self-perform YES: every work item gets TWO rows — one "Labor" (qty in HR, unit cost is CMB rate $85/$100/$130) and one "Material" (qty in SF/LF/EA/LS, unit cost is material only).
-- If self-perform NO: every work item gets ONE row, costType="Subcontractor", qty in SF/LF/EA/LS/LOT, unit cost is the all-in sub price.
+- If self-perform YES: every work item gets TWO rows — one "Labor" (qty in HR, unit cost = CMB billing rate $85/$100/$130) and one "Material" (qty in SF/LF/EA/LS, unit cost = material only).
+- If self-perform NO: every work item gets ONE row, costType="Subcontractor", qty in SF/LF/EA/LS/LOT, unit cost = the sub's installed price (NOT including CMB markup).
 - Exception within self-perform: PM, Supervision, Permits, Insurance can be Labor-only (no Material row).
 - Exception within non-self-perform: Appliances, Fixtures, and pure-material allowances can be Material-only rows.
 
@@ -1347,19 +1395,23 @@ CSI CODE RULE — STRICT:
 
 DESCRIPTION RULE: Write a short 5-12 word description of what the line covers (e.g., "Remove existing uppers and lowers", "Prime + 2 coats, walls and ceiling").
 
-Generate 8-12 line items. Sum of (qty × unitCost) across all items must equal $${highTotal.toLocaleString()} (±5% tolerance).
+FIELD NAME RULE — STRICT: Use exactly these keys: "title", "description", "costCode", "quantity", "unit", "unitCost", "costType", "markedAs". DO NOT use "qty", "desc", "code", or other variants — they will be silently dropped.
+
+Generate 8-12 line items. Sum of (quantity × unitCost) across all items must equal $${highTotal.toLocaleString()} (±5% tolerance).
 
 Return ONLY this JSON array:
 [{"title":"short trade name","description":"5-12 word desc","costCode":"X.YZZ Full Code Name","quantity":0,"unit":"SF|LF|EA|LS|HR|LOT","unitCost":0,"costType":"Labor|Material|Subcontractor","markedAs":""}]`;
 
-      const models = ["claude-haiku-4-5-20251001","claude-sonnet-4-20250514"];
+      // Use Sonnet first for Excel takeoff (Haiku as fallback) — better at code lookups.
+      // temperature: 0 for consistency — same input should yield same line items.
+      const models = ["claude-sonnet-4-20250514","claude-haiku-4-5-20251001"];
       let gotItems = null;
       for(let attempt=0; attempt<models.length && !gotItems; attempt++){
         try {
           const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
             method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({
-              model: models[attempt], max_tokens: 2000,
+              model: models[attempt], max_tokens: 2000, temperature: 0,
               system: "You are a construction estimator in Flathead Valley, Montana. Return ONLY a valid JSON array. No markdown, no prose.",
               messages: [{role:"user", content: prompt}]
             })
@@ -1390,28 +1442,78 @@ Return ONLY this JSON array:
         }
       }
       if(gotItems){
+        // Normalize field names — AI sometimes returns "qty" instead of "quantity"
+        gotItems.forEach(it => {
+          if(it.qty != null && it.quantity == null) it.quantity = it.qty;
+          if(it.desc != null && it.description == null) it.description = it.desc;
+          if(it.code != null && it.costCode == null) it.costCode = it.code;
+          if(it.type != null && it.costType == null) it.costType = it.type;
+          // Coerce to numbers
+          it.quantity = Number(it.quantity) || 0;
+          it.unitCost = Number(it.unitCost) || 0;
+        });
+        // Guard: reject all-zero AI output rather than silently writing $0 line items
+        const anyNonZero = gotItems.some(it => (Number(it.quantity)||0) * (Number(it.unitCost)||0) > 0);
+        if(!anyNonZero){
+          console.warn(`AI returned all-zero items for ${section.name} — skipping save`);
+          gotItems = null;
+        }
+      }
+      if(gotItems){
         const items = gotItems;
         const div = getCSIDiv(section.name);
-        // FIX 4: validate + normalize every item returned by the AI
+        // Validate + normalize every item returned by the AI.
+        // IMPORTANT: sanitize costType FIRST so normalizeCostCode picks the right suffix.
         items.forEach(item => {
-          // Normalize cost code against the canonical master list
-          item.costCode = normalizeCostCode(item.costCode, item.costType, div.num);
-          // Sanitize cost type to one of the three valid values
-          if(!["Labor", "Material", "Subcontractor"].includes(item.costType)){
-            item.costType = sectionIsSelfPerform ? "Labor" : "Subcontractor";
+          // Sanitize cost type to one of the three valid values BEFORE code normalize
+          let ct = item.costType;
+          // Handle lowercase or shorthand AI sometimes returns (e.g. "sub", "labor")
+          if(typeof ct === "string"){
+            const ctl = ct.toLowerCase();
+            if(ctl.startsWith("lab")) ct = "Labor";
+            else if(ctl.startsWith("mat")) ct = "Material";
+            else if(ctl.startsWith("sub")) ct = "Subcontractor";
           }
+          if(!["Labor", "Material", "Subcontractor"].includes(ct)){
+            ct = sectionIsSelfPerform ? "Labor" : "Subcontractor";
+          }
+          item.costType = ct;
+          // Now normalize cost code against the canonical master list
+          item.costCode = normalizeCostCode(item.costCode, item.costType, div.num);
           // Default empty markedAs to ""
           if(!item.markedAs) item.markedAs = "";
         });
 
-        // FIX 5: scale line items so sum(qty × unitCost) equals section.high exactly
+        // Pin self-perform labor rates so scaling doesn't distort them.
+        // Carpenter $85/hr, Foreman $100/hr, PM $130/hr are the CMB billing rates;
+        // they cannot be inflated by section.high scaling.
+        const LABOR_RATES_HR = [85, 100, 130];
+        const isHourLabor = (it) => it.costType === "Labor" && String(it.unit||"").toUpperCase() === "HR";
+
+        // Scale line items so sum(qty × unitCost) equals section.high.
+        // Excludes hourly labor lines from being scaled — adjust their quantities instead.
         const targetTotal = section.high || 0;
         const currentTotal = items.reduce((sum, it) => sum + (Number(it.quantity)||0) * (Number(it.unitCost)||0), 0);
         if(currentTotal > 0 && targetTotal > 0){
-          const scaleFactor = targetTotal / currentTotal;
+          // First, force any hourly Labor lines to a canonical CMB rate (closest of 85/100/130)
           items.forEach(it => {
-            it.unitCost = Math.round((Number(it.unitCost)||0) * scaleFactor * 100) / 100;
+            if(isHourLabor(it)){
+              const uc = Number(it.unitCost) || 85;
+              const closest = LABOR_RATES_HR.reduce((a,b) => Math.abs(b-uc) < Math.abs(a-uc) ? b : a, 85);
+              it.unitCost = closest;
+            }
           });
+          // Compute fixed (labor) and scalable (everything else) totals AFTER pinning labor rates
+          const fixedTotal = items.filter(isHourLabor).reduce((s,it)=>s + (Number(it.quantity)||0)*(Number(it.unitCost)||0), 0);
+          const scalableTotal = items.filter(it=>!isHourLabor(it)).reduce((s,it)=>s + (Number(it.quantity)||0)*(Number(it.unitCost)||0), 0);
+          const remainingTarget = Math.max(targetTotal - fixedTotal, 0);
+          if(scalableTotal > 0 && remainingTarget > 0){
+            const scaleFactor = remainingTarget / scalableTotal;
+            items.forEach(it => {
+              if(isHourLabor(it)) return; // labor rates locked
+              it.unitCost = Math.round((Number(it.unitCost)||0) * scaleFactor * 100) / 100;
+            });
+          }
         }
         est.sections[i].lineItems = items;
       }
@@ -1445,15 +1547,23 @@ function buildBTWorkbook(est){
   if(est.generalConditions && est.generalConditions.items && est.generalConditions.items.length){
     const div = getCSIDiv("General Conditions");
     est.generalConditions.items.forEach(gc => {
+      // FIX: computeGC builds GC items with {qty, unit, unitCostLow, unitCostHigh, lineTotalLow, lineTotalHigh, low, high}.
+      // gc.high is the LINE TOTAL (qty × unitCostHigh), NOT a unit cost.
+      // Old bug: setting unitCost=gc.high made BT recompute qty × gc.high → 3x inflation.
+      const qty = Number(gc.quantity || gc.qty || 1);
+      // Prefer explicit unitCost if present; otherwise use unitCostHigh; LAST resort derive from total/qty
+      let unitCost = Number(gc.unitCost || gc.unitCostHigh || 0);
+      if(!unitCost && gc.high && qty > 0) unitCost = gc.high / qty;
+      const costType = gc.costType || "Labor";
       rows.push({
         category: div.name,
-        costCode: gc.costCode || "1.101 Project Administration and General Office Labor",
+        costCode: normalizeCostCode(gc.costCode || "1.101 Project Administration and General Office Labor", costType, 1),
         title: gc.name || gc.title || "General Conditions Item",
         description: gc.description || "",
-        quantity: gc.quantity || gc.qty || 1,
+        quantity: qty,
         unit: gc.unit || "LS",
-        unitCost: gc.unitCost || gc.high || 0,
-        costType: gc.costType || "Labor",
+        unitCost: unitCost,
+        costType: costType,
         markedAs: gc.markedAs || "",
         csiNum: parseInt(div.num, 10) || 99
       });
@@ -1896,7 +2006,7 @@ function generateProposalDocument(){
 
   <!-- INTRO LETTER -->
   <div style="padding:0 0 30px 0;">
-    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(d.clientName.split(/[,&]|and/i)[0].trim())+"," : "Hello,"}</p>
+    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(firstNameFromClient(d.clientName))+"," : "Hello,"}</p>
     <p style="margin-bottom:14px;">Thank you for letting us walk your property and hear what you're imagining for this build. What follows is our shared starting point — what we saw, what we'd build, what it'll cost, and what comes next.</p>
     <p style="margin-bottom:14px;">Copper Mountain Builders has been doing this work out of Kalispell for years, and my family has been in Montana for six generations. That heritage shapes how we run a job — we listen before we draw a line, we catch problems before they cost you, and we answer the phone whether you're three days into framing or three years into living in the home. This document is a reflection of that approach, applied to your project.</p>
     <p style="margin-bottom:14px;">Read through it at your own pace. Mark anything that doesn't sit right, anything that gets you excited, anything you want to talk through. Then we'll sit down together and turn this starting point into a plan.</p>
@@ -2210,20 +2320,32 @@ function photoSection(zoneId, type, label){
 }
 
 // ── Signature pads ───────────────────────────────────────────────────
-const sigPads = {};
+// NOTE: NO cache here. Every render() rebuilds the DOM, creating brand-new
+// canvas elements. Caching by canvasId broke signing after re-render because
+// the cached `true` flag blocked re-attaching listeners to the new canvas.
 function initSigPad(canvasId, sigKey){
   const canvas = document.getElementById(canvasId);
-  if(!canvas || sigPads[canvasId]) return;
+  if(!canvas) return;
+  // Guard against double-binding on the SAME canvas element using a DOM marker
+  if(canvas.dataset.sigBound === "1") return;
+  canvas.dataset.sigBound = "1";
   const ctx = canvas.getContext("2d");
-  if(appData[sigKey]){ const img=new Image(); img.onload=()=>ctx.drawImage(img,0,0,canvas.width,canvas.height); img.src=appData[sigKey]; }
+  if(appData[sigKey]){
+    const img=new Image();
+    img.onload=()=>{
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const ph = document.getElementById(canvasId+"_ph");
+      if(ph) ph.style.display = "none";
+    };
+    img.src=appData[sigKey];
+  }
   let drawing = false;
   function pos(e){ const rect=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:(t.clientX-rect.left)*(canvas.width/rect.width),y:(t.clientY-rect.top)*(canvas.height/rect.height)}; }
   function start(e){ e.preventDefault(); drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
   function move(e){ e.preventDefault(); if(!drawing)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle=sigKey==="repSig"?"#b87333":"#f5f0e8"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.stroke(); }
-  function end(e){ e.preventDefault(); drawing=false; appData[sigKey]=canvas.toDataURL(); document.getElementById(canvasId+"_ph").style.display="none"; }
+  function end(e){ e.preventDefault(); drawing=false; appData[sigKey]=canvas.toDataURL(); const ph=document.getElementById(canvasId+"_ph"); if(ph) ph.style.display="none"; }
   canvas.addEventListener("mousedown",start); canvas.addEventListener("mousemove",move); canvas.addEventListener("mouseup",end);
   canvas.addEventListener("touchstart",start,{passive:false}); canvas.addEventListener("touchmove",move,{passive:false}); canvas.addEventListener("touchend",end,{passive:false});
-  sigPads[canvasId]=true;
 }
 function clearSig(canvasId, sigKey){
   const c=document.getElementById(canvasId); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height);
@@ -2547,7 +2669,7 @@ async function generateProposalBlob(){
     <div style="margin-top:60px;font-size:11pt;color:#5C5850;font-style:italic;">By ${esc(d.repName||"Copper Mountain Builders")} · Kalispell, Montana</div>
   </div>
   <div style="padding:0 0 30px 0;">
-    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(d.clientName.split(/[,&]|and/i)[0].trim())+"," : "Hello,"}</p>
+    <p style="margin-bottom:14px;">${d.clientName ? "Hi "+esc(firstNameFromClient(d.clientName))+"," : "Hello,"}</p>
     <p style="margin-bottom:14px;">Thank you for letting us walk your property and hear what you're imagining for this build. What follows is our shared starting point — what we saw, what we'd build, what it'll cost, and what comes next.</p>
     <p style="margin-bottom:14px;">Copper Mountain Builders has been doing this work out of Kalispell for years, and my family has been in Montana for six generations. That heritage shapes how we run a job — we listen before we draw a line, we catch problems before they cost you, and we answer the phone whether you're three days into framing or three years into living in the home. This document is a reflection of that approach, applied to your project.</p>
     <p style="margin-bottom:14px;">Read through it at your own pace. Mark anything that doesn't sit right, anything that gets you excited, anything you want to talk through. Then we'll sit down together and turn this starting point into a plan.</p>
@@ -2807,7 +2929,7 @@ Return ONLY this JSON:
       if(isFallback && status) status.textContent = attempt===1 ? "Opus unavailable, trying Sonnet…" : "Using Haiku fallback…";
       const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:analyzeModels[attempt], max_tokens:1500,
+        body: JSON.stringify({ model:analyzeModels[attempt], max_tokens:1500, temperature: 0,
           messages:[{role:"user", content: visionContent.length > 1 ? visionContent : [{type:"text", text:analysisPrompt}]}] })
       });
       data = await res.json();
@@ -2852,8 +2974,10 @@ async function runGenerateEstimate(){
   const isCommercial = (z.type||"").toLowerCase().includes("commercial");
   const isDavisBacon = appData.davisBacon;
 
-  async function workerCall(messages, system, maxTokens=1000, model="claude-opus-4-20250514"){
-    // Fallback chain: Sonnet (best value) → Opus (most capable) → Haiku (always available)
+  async function workerCall(messages, system, maxTokens=1000, model="claude-opus-4-20250514", temperature=0){
+    // Fallback chain: Opus (primary, most accurate) → Sonnet (fallback) → Haiku (always available)
+    // Temperature defaults to 0 for max consistency on structural/estimating calls.
+    // Pass temperature=0.4 explicitly for narrative calls (SOW) where some warmth helps.
     const modelsToTry = [model, "claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"];
     const modelNames = {"claude-sonnet-4-20250514":"Sonnet","claude-opus-4-20250514":"Opus","claude-haiku-4-5-20251001":"Haiku"};
     for(let attempt = 0; attempt < modelsToTry.length; attempt++){
@@ -2863,7 +2987,7 @@ async function runGenerateEstimate(){
         if(isFallback && btn) btn.textContent = `⏳ ${modelNames[modelsToTry[0]]||"Primary"} unavailable, trying ${modelNames[currentModel]||currentModel}…`;
         const res = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ model:currentModel, max_tokens:maxTokens, temperature:0.3, system, messages })
+          body: JSON.stringify({ model:currentModel, max_tokens:maxTokens, temperature, system, messages })
         });
         const data = await res.json();
         if(data.error){
@@ -3006,7 +3130,7 @@ Be specific and quantitative. Reference code sections where applicable. 800-1500
         if(isFB) btn.textContent = va===1 ? "⏳ Step 1 — Trying Sonnet…" : "⏳ Step 1 — Using Haiku fallback…";
         const visionRes = await fetch("https://billowing-snowflake-38f0.coppermountainbuilders406.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({model:visionModels[va], max_tokens:3000, messages:[{role:"user",content:visionContent}]})
+          body: JSON.stringify({model:visionModels[va], max_tokens:3000, temperature: 0, messages:[{role:"user",content:visionContent}]})
         });
         const vd = await visionRes.json();
         if(vd.error && (JSON.stringify(vd.error).includes("overloaded") || visionRes.status === 529) && va < visionModels.length - 1){
@@ -3040,8 +3164,8 @@ Cover: 1) Permits required (building, electrical, plumbing, mechanical, special)
 4) Timeline risks (permit delays, engineering, seasonal restrictions)
 5) Cost impacts with dollar estimates
 
-Write as a professional narrative report with ALL CAPS section headings. Plain paragraphs, 500-800 words. Do NOT return JSON. Write like a contractor writing a compliance memo — specific, direct, actionable.`
-      }], `You are the Chief Estimator at Copper Mountain Builders with deep experience in Montana building code and Flathead County permitting. Write clear professional narrative reports with ALL CAPS section headings. Never return JSON. Write like an experienced contractor.`, 1500);
+Write as a professional narrative report with **sentence-case** section headings (NOT all caps — Title Case Like This). Plain paragraphs, 500-800 words. Do NOT return JSON. Write like an experienced Montana builder writing a compliance memo for an internal rep — specific, direct, actionable. This is for internal CMB use only, so professional but readable.`
+      }], `You are the Chief Estimator at Copper Mountain Builders, with deep working knowledge of Montana building code (IRC/IBC 2021, Montana 2021 IECC adoption) and Flathead County permitting. Write clear professional narrative reports using sentence-case section headings (no all-caps). Plain paragraphs only. Never return JSON.`, 1500);
     } catch(e){ console.warn("Compliance failed:", e.message); complianceResult = "Code compliance review unavailable. Recommend manual review."; }
 
     // ── CALL 3: Quantity Takeoff (NEW — replaces old calls 3+4) ──
@@ -3100,7 +3224,24 @@ ${qaContext ? "Q&A:\n"+qaContext : ""}
 
 PART 1 — SCOPE OF WORK (450-650 words for client):
 
-VOICE — read this carefully. You are writing on behalf of Copper Mountain Builders, a sixth-generation Montana family business in Kalispell. The voice is warm, neighborly, refined. Listens before it pitches. Catches problems before they cost the homeowner. Answers the phone three years after the build. Speaks the way a builder would speak to a friend over coffee — confident in the craft, gentle in the delivery. Use "we" for CMB. Use the client's first name(s) once near the top if they're known. Avoid hollow adjectives ("luxurious," "stunning"), avoid construction jargon, avoid bullet-list dryness. Write in flowing sentences with short paragraphs.
+VOICE — read this carefully and follow it strictly. You are writing on behalf of Copper Mountain Builders, a sixth-generation Montana family business in Kalispell, founded in 2018 by Matt Farrier. The voice is warm, neighborly, refined. Listens before it pitches. Catches problems before they cost the homeowner. Answers the phone three years after the build. Speaks the way a builder would speak to a friend over coffee — confident in the craft, gentle in the delivery. Use "we" for CMB. Use the client's first name(s) once near the top if they're known. Avoid hollow adjectives ("luxurious," "stunning," "premier," "unparalleled"). Avoid construction jargon. Avoid bullet-list dryness for narrative content. Write in flowing sentences with short paragraphs.
+
+FORBIDDEN — these will get the draft rejected. Do NOT write any of:
+- ALL CAPS section headers
+- "We look forward to partnering with you" / "synergize" / "exceed expectations"
+- "I hope this finds you well" / "I trust this finds you"
+- Any claim of experience years ("decades," "in our 30 years," "long-time builder," "45 years experience") — CMB was founded in 2018
+- "We fix other people's messes" or salvage-operator language — the takeover history is a credibility lever, never a service offering
+- Fear-mongering about other builders
+- Implying CMB only does big custom — CMB's range is full custom homes through a long-overdue master bathroom
+- Calling CMB a "general contractor" or "GC" — CMB is a design-build firm; the word "builder" is brand-critical
+- Abbreviating to "Copper Mountain" — always "Copper Mountain Builders" in customer-facing prose
+- Specific dollar amounts as CMB outcomes ("$40K change order saved") — use "major change orders" or omit
+
+USE WHERE NATURAL (heritage, not credential):
+- "Sixth-generation Montanan" — Matt's family roots; reference once max, as heritage
+- "In Montana, we still pull over to help a stranger with a flat" — the brand DNA
+- The three care behaviors: "we catch problems before they cost you" / "we listen before we draw a line" / "we answer the phone whether you're three days into framing or three years into living in it"
 
 GROUND THE WRITING IN WHAT WE ACTUALLY SAW AND DISCUSSED. Use the SITE ANALYSIS, NOTES, PROJECT NOTES, and Q&A above as the source of truth — pull specific details from them (the lot size, the existing conditions, what the client said they want, the trades involved). Do NOT invent details that aren't grounded in the inputs. If a section's specifics aren't in the inputs, keep it brief and honest.
 
@@ -3123,7 +3264,7 @@ PART 3 — COMPLIANCE NOTES (internal, rep only): Flag code issues.
 
 Return ONLY this JSON:
 {"summary":"SOW narrative","schedule":{"designPhase":"10-14 weeks","constructionPhase":"X months","startToFinish":"total","milestones":[{"phase":"Phase name","duration":"X weeks","notes":"details"}]},"complianceNotes":["note1"]}`
-    }], SYSTEM.replace("RESPOND ONLY WITH VALID JSON","Return ONLY the requested JSON."), 3000);
+    }], SYSTEM.replace("RESPOND ONLY WITH VALID JSON","Return ONLY the requested JSON."), 3000, "claude-opus-4-20250514", 0.4);
 
     const sowResult = safeJSON(sowRaw, "sow");
 
@@ -3863,14 +4004,20 @@ function renderPrintDoc(){
             </div>
             ${s.lineItems&&s.lineItems.length?`
               <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                <tbody>${s.lineItems.map(item=>`
+                <tbody>${s.lineItems.map(item=>{
+                  // Support both shapes: new (quantity/title/unitCost) and old (qty/description/unitCost+total)
+                  const qty = Number(item.quantity || item.qty || 0);
+                  const uc = Number(item.unitCost || 0);
+                  const total = Number(item.total != null ? item.total : (qty * uc)) || 0;
+                  const label = item.title || item.description || "";
+                  return `
                   <tr style="border-bottom:1px solid #f0ebe0;">
-                    <td style="padding:4px 10px;color:#444;">${esc(item.description)}</td>
-                    <td style="padding:4px 8px;text-align:center;color:#888;">${item.qty} ${esc(item.unit)}</td>
-                    <td style="padding:4px 8px;text-align:right;color:#888;">$${Number(item.unitCost).toLocaleString()}</td>
-                    <td style="padding:4px 10px;text-align:right;color:#333;">$${Number(item.total).toLocaleString()}</td>
-                  </tr>
-                `).join("")}</tbody>
+                    <td style="padding:4px 10px;color:#444;">${esc(label)}</td>
+                    <td style="padding:4px 8px;text-align:center;color:#888;">${qty} ${esc(item.unit||"LS")}</td>
+                    <td style="padding:4px 8px;text-align:right;color:#888;">$${uc.toLocaleString()}</td>
+                    <td style="padding:4px 10px;text-align:right;color:#333;">$${total.toLocaleString()}</td>
+                  </tr>`;
+                }).join("")}</tbody>
               </table>
             `:""}
           </div>

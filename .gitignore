@@ -1,0 +1,12 @@
+# Local-only Claude config
+.claude/settings.local.json
+
+# Reference data & local-only notes
+CLAUDE.aboutme.md
+
+# Memory dumps from agents
+**/memory/
+
+# Temp Python artifacts
+__pycache__/
+*.pyc

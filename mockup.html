@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CMB App Mockup — All Pages</title>
+<style>
+  :root {
+    --copper: #b87333;
+    --gold: #d4a854;
+    --stone-dark: #1a1917;
+    --stone-mid: #2C2A27;
+    --stone-light: #8a8580;
+    --cream: #f5f0e8;
+    --cream-dk: #d4cfc5;
+    --success: #4a7c59;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--cream); }
+
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: var(--stone-dark); border-bottom: 2px solid var(--copper); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; }
+  .nav button { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid rgba(184,115,51,0.3); background: transparent; color: var(--cream-dk); font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .nav button.active { background: linear-gradient(135deg, var(--copper), var(--gold)); color: var(--stone-dark); font-weight: 700; border-color: transparent; }
+  .nav button:hover:not(.active) { border-color: var(--copper); color: var(--copper); }
+
+  .page-container { margin-top: 60px; padding: 20px; max-width: 480px; margin-left: auto; margin-right: auto; }
+  .page { display: none; animation: pageIn 0.3s ease; }
+  .page.active { display: block; }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Header bar mockup */
+  .app-header { background: linear-gradient(135deg, var(--stone-mid), #363330); border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid rgba(184,115,51,0.2); text-align: center; }
+  .app-header .logo-text { font-size: 11px; letter-spacing: 5px; text-transform: uppercase; color: var(--copper); margin-bottom: 4px; }
+  .app-header .page-title { font-size: 18px; font-weight: 700; color: var(--cream); }
+
+  .card { background: var(--stone-mid); border-radius: 12px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.05); }
+  .card-copper { background: var(--stone-mid); border-radius: 12px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(184,115,51,0.3); }
+  .section-title { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--copper); margin-bottom: 12px; font-weight: 600; }
+  .field { margin-bottom: 12px; }
+  .field-label { display: block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--stone-light); margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: var(--cream); font-size: 14px; }
+  .field textarea { min-height: 60px; resize: vertical; }
+
+  .btn-primary { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; background: linear-gradient(135deg, var(--copper), var(--gold)); color: var(--stone-dark); box-shadow: 0 4px 20px rgba(184,115,51,0.25); }
+  .btn-secondary { display: block; width: 100%; padding: 12px; border: 1px solid rgba(184,115,51,0.3); border-radius: 10px; background: transparent; color: var(--cream-dk); font-size: 14px; cursor: pointer; margin-bottom: 10px; }
+  .btn-success { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; background: linear-gradient(135deg, var(--success), #2d6a4f); color: white; box-shadow: 0 4px 20px rgba(74,124,89,0.3); }
+  .btn-blue { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; background: linear-gradient(135deg, #1a73e8, #4285f4); color: white; box-shadow: 0 4px 20px rgba(26,115,232,0.3); }
+
+  .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .photo-placeholder { aspect-ratio: 1; border-radius: 8px; background: rgba(0,0,0,0.3); border: 2px dashed rgba(184,115,51,0.3); display: flex; align-items: center; justify-content: center; color: var(--stone-light); font-size: 24px; }
+  .photo-filled { aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg, #3a3632, #4a4640); display: flex; align-items: center; justify-content: center; color: var(--copper); font-size: 11px; text-align: center; padding: 8px; border: 1px solid rgba(184,115,51,0.2); }
+
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .toggle-label { font-size: 14px; color: var(--cream-dk); }
+  .toggle-switch { width: 44px; height: 24px; border-radius: 12px; background: rgba(255,255,255,0.15); position: relative; cursor: pointer; }
+  .toggle-switch.on { background: var(--copper); }
+  .toggle-switch .toggle-dot { width: 20px; height: 20px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: 0.2s; }
+  .toggle-switch.on .toggle-dot { left: 22px; }
+
+  .divider { border: none; border-top: 1px solid rgba(184,115,51,0.15); margin: 16px 0; }
+
+  .step-indicator { display: flex; justify-content: center; gap: 6px; margin-bottom: 16px; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.15); }
+  .step-dot.active { background: var(--copper); width: 24px; border-radius: 4px; }
+  .step-dot.done { background: var(--success); }
+
+  /* Concept page specific */
+  .concept-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .concept-img { aspect-ratio: 4/3; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 12px; text-align: center; padding: 12px; }
+  .concept-before { background: linear-gradient(135deg, #2a2826, #3a3632); border: 1px solid rgba(255,255,255,0.1); color: var(--stone-light); }
+  .concept-after { background: linear-gradient(135deg, #2a3528, #3a4a32); border: 1px solid rgba(74,124,89,0.3); color: var(--success); }
+  .concept-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+
+  /* Estimate line items */
+  .line-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px; }
+  .line-item .desc { color: var(--cream-dk); flex: 1; }
+  .line-item .qty { color: var(--stone-light); font-size: 12px; margin: 0 10px; }
+  .line-item .cost { color: var(--gold); font-weight: 600; white-space: nowrap; }
+
+  .total-row { display: flex; justify-content: space-between; padding: 12px 0; font-size: 15px; font-weight: 700; }
+  .total-row .label { color: var(--cream); }
+  .total-row .amount { color: var(--gold); }
+
+  /* Contract */
+  .contract-scroll { background: rgba(44,42,39,0.5); border-radius: 8px; padding: 16px; max-height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.8; color: var(--cream-dk); }
+  .contract-heading { color: var(--copper); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin: 16px 0 8px 0; font-weight: 600; }
+
+  .sig-box { height: 80px; border: 2px dashed rgba(184,115,51,0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--stone-light); font-size: 13px; margin-bottom: 8px; background: rgba(0,0,0,0.2); }
+
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+  .badge-new { background: rgba(184,115,51,0.15); color: var(--copper); border: 1px solid rgba(184,115,51,0.3); }
+
+  .mockup-note { background: rgba(184,115,51,0.08); border: 1px dashed rgba(184,115,51,0.3); border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12px; color: var(--copper); line-height: 1.6; }
+  .mockup-note strong { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="active" onclick="showPage(0)">1. Client</button>
+  <button onclick="showPage(1)">2. Scope</button>
+  <button onclick="showPage(2)">3. Concept <span class="badge badge-new">NEW</span></button>
+  <button onclick="showPage(3)">4. Estimate</button>
+  <button onclick="showPage(4)">5. Review</button>
+  <button onclick="showPage(5)">6. Sign</button>
+</div>
+
+<div class="page-container">
+
+<!-- ═══════════════ PAGE 1: CLIENT ═══════════════ -->
+<div class="page active" id="page-0">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Client Information</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Client Details</div>
+    <div class="field"><label class="field-label">Client Name</label><input value="John & Sarah Thompson" readonly/></div>
+    <div class="field"><label class="field-label">Email</label><input value="thompson@email.com" readonly/></div>
+    <div class="field"><label class="field-label">Phone</label><input value="(406) 555-1234" readonly/></div>
+    <div class="field"><label class="field-label">Mailing Address</label><input value="123 Lakeside Dr" readonly/></div>
+    <div class="field"><label class="field-label">City</label><input value="Whitefish" readonly/></div>
+    <div class="field"><label class="field-label">Zip</label><input value="59937" readonly/></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Project Location</div>
+    <div class="field"><label class="field-label">Project Address</label><input value="456 Mountain View Rd" readonly/></div>
+    <div class="field"><label class="field-label">City</label><input value="Whitefish" readonly/></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">CMB Representative</div>
+    <div class="field"><label class="field-label">Rep Name</label><input value="Matt Farrier" readonly/></div>
+  </div>
+
+  <button class="btn-primary" onclick="showPage(1)">Next: Scope →</button>
+</div>
+
+<!-- ═══════════════ PAGE 2: SCOPE ═══════════════ -->
+<div class="page" id="page-1">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Project Scope</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Project Details</div>
+    <div class="field"><label class="field-label">Project Type</label><select><option>Kitchen Remodel</option></select></div>
+    <div class="field"><label class="field-label">Square Footage</label><input value="280" readonly/></div>
+    <div class="field"><label class="field-label">Notes / Client Directions</label><textarea readonly>Client wants to open up kitchen to living room, remove wall between. New quartz countertops, white shaker cabinets, LVP flooring, subway tile backsplash. Add island with seating for 4. Upgrade all appliances to stainless. Add under-cabinet and recessed lighting.</textarea></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Current Conditions Photos</div>
+    <div class="photo-grid">
+      <div class="photo-filled">Kitchen<br/>overview</div>
+      <div class="photo-filled">Cabinets<br/>close-up</div>
+      <div class="photo-filled">Counter &<br/>backsplash</div>
+      <div class="photo-filled">Wall to<br/>remove</div>
+      <div class="photo-placeholder">+</div>
+      <div class="photo-placeholder">+</div>
+    </div>
+    <button class="btn-secondary" style="font-size:13px;">📷 Camera</button>
+    <button class="btn-secondary" style="font-size:13px;">🖼 Library</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Inspiration Photos</div>
+    <div class="photo-grid">
+      <div class="photo-filled">Pinterest<br/>kitchen</div>
+      <div class="photo-filled">Island<br/>example</div>
+      <div class="photo-placeholder">+</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Construction Documents</div>
+    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;font-size:13px;color:var(--cream-dk);margin-bottom:8px;">
+      📎 Kitchen_Floorplan.pdf <span style="color:var(--copper);font-size:11px;">(3 pages)</span>
+    </div>
+    <button class="btn-secondary" style="font-size:13px;">📄 Upload Documents</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Settings</div>
+    <div class="toggle-row">
+      <span class="toggle-label">Davis-Bacon Prevailing Wages</span>
+      <div class="toggle-switch"><div class="toggle-dot"></div></div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label class="field-label">Margin %</label>
+      <input value="20" readonly style="width:80px;"/>
+    </div>
+  </div>
+
+  <button class="btn-primary" style="background:linear-gradient(135deg, #e8a020, #d4a854);">⚡ Analyze & Ask</button>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-title">AI Clarifying Questions</div>
+    <div class="field"><label class="field-label">Q1: Is the wall between kitchen and living room load-bearing?</label><input value="Yes, it has a beam above" readonly/></div>
+    <div class="field"><label class="field-label">Q2: Appliance budget preference?</label><select><option>Mid-range ($8k-$12k package)</option></select></div>
+    <div class="field"><label class="field-label">Q3: Island countertop — same quartz as perimeter or waterfall edge?</label><select><option>Waterfall edge</option></select></div>
+  </div>
+
+  <button class="btn-primary" onclick="showPage(2)">Next: Concept Images →</button>
+  <button class="btn-secondary" onclick="showPage(0)">← Back to Client</button>
+</div>
+
+<!-- ═══════════════ PAGE 3: CONCEPT (NEW) ═══════════════ -->
+<div class="page" id="page-2">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Concept Images</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="mockup-note">
+    <strong>NEW STEP:</strong> Select a before photo, describe the changes, and AI generates a realistic concept image. Iterate until the client loves it. These images feed into the estimate for better accuracy.
+  </div>
+
+  <!-- Concept 1 -->
+  <div class="card-copper">
+    <div class="section-title">Concept 1 — Kitchen Overview</div>
+    <div class="concept-pair">
+      <div>
+        <div class="concept-label" style="color:var(--stone-light);">Before</div>
+        <div class="concept-img concept-before">📷 Existing kitchen<br/>with oak cabinets<br/>& laminate counters</div>
+      </div>
+      <div>
+        <div class="concept-label" style="color:var(--success);">After — AI Generated</div>
+        <div class="concept-img concept-after">✨ Same kitchen with<br/>white shaker cabinets,<br/>quartz counters,<br/>subway tile backsplash</div>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Your Prompt</label>
+      <textarea readonly style="font-size:13px;">Replace oak cabinets with white shaker style. Replace laminate countertops with white quartz with grey veining. Add white subway tile backsplash. New stainless steel appliances. Add recessed can lights in ceiling. Keep the same window and floor layout.</textarea>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;margin:0;font-size:13px;">🔄 Regenerate</button>
+      <button class="btn-success" style="flex:1;margin:0;font-size:13px;">✓ Approve</button>
+    </div>
+  </div>
+
+  <!-- Concept 2 -->
+  <div class="card-copper">
+    <div class="section-title">Concept 2 — Island & Open Floor Plan</div>
+    <div class="concept-pair">
+      <div>
+        <div class="concept-label" style="color:var(--stone-light);">Before</div>
+        <div class="concept-img concept-before">📷 View of wall<br/>between kitchen<br/>& living room</div>
+      </div>
+      <div>
+        <div class="concept-label" style="color:var(--success);">After — AI Generated</div>
+        <div class="concept-img concept-after">✨ Wall removed,<br/>open layout with<br/>waterfall quartz island,<br/>4 barstools, pendants</div>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Your Prompt</label>
+      <textarea readonly style="font-size:13px;">Remove the wall between kitchen and living room. Add a large island with waterfall edge quartz countertop, seating for 4 with modern barstools. Add 3 pendant lights above island. Open concept to living room.</textarea>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;margin:0;font-size:13px;">🔄 Regenerate</button>
+      <button class="btn-success" style="flex:1;margin:0;font-size:13px;">✓ Approve</button>
+    </div>
+  </div>
+
+  <!-- Add another -->
+  <div class="card" style="border: 2px dashed rgba(184,115,51,0.2); text-align:center; padding:24px;">
+    <div style="font-size:13px;color:var(--stone-light);margin-bottom:10px;">Select another before photo to create a concept</div>
+    <div class="photo-grid" style="max-width:200px;margin:0 auto 12px;">
+      <div class="photo-filled" style="border:2px solid var(--copper);cursor:pointer;">Kitchen<br/>overview</div>
+      <div class="photo-filled" style="opacity:0.4;">Cabinets<br/><span style="font-size:9px;color:var(--success);">✓ used</span></div>
+      <div class="photo-filled" style="cursor:pointer;">Counter &<br/>backsplash</div>
+    </div>
+    <button class="btn-secondary" style="font-size:13px;">+ New Concept Image</button>
+  </div>
+
+  <div style="height:14px;"></div>
+  <button class="btn-primary" onclick="showPage(3)">Next: Generate Estimate →</button>
+  <button class="btn-secondary" onclick="showPage(1)">← Back to Scope</button>
+</div>
+
+<!-- ═══════════════ PAGE 4: ESTIMATE ═══════════════ -->
+<div class="page" id="page-3">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Estimate</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="mockup-note">
+    Estimate is generated using before photos, approved concept images, PDF documents, notes, and clarifying answers. AI identifies scope & quantities, app does all math.
+  </div>
+
+  <button class="btn-primary" style="margin-bottom:14px;">⚡ Generate Estimate</button>
+
+  <!-- Trade sections -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Demolition</div>
+      <div style="color:var(--gold);font-size:13px;font-weight:600;">$3,200 – $4,800</div>
+    </div>
+    <div class="line-item"><span class="desc">Remove existing cabinets (upper & lower)</span><span class="qty">22 LF</span><span class="cost">$1,100 – $1,650</span></div>
+    <div class="line-item"><span class="desc">Remove countertops & backsplash</span><span class="qty">38 SF</span><span class="cost">$380 – $570</span></div>
+    <div class="line-item"><span class="desc">Load-bearing wall removal w/ beam</span><span class="qty">1 EA</span><span class="cost">$1,720 – $2,580</span></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Cabinetry</div>
+      <div style="color:var(--gold);font-size:13px;font-weight:600;">$12,600 – $18,900</div>
+    </div>
+    <div class="line-item"><span class="desc">White shaker cabinets — perimeter</span><span class="qty">22 LF</span><span class="cost">$8,800 – $13,200</span></div>
+    <div class="line-item"><span class="desc">Island base cabinets</span><span class="qty">8 LF</span><span class="cost">$3,200 – $4,800</span></div>
+    <div class="line-item"><span class="desc">Soft-close hardware</span><span class="qty">1 LOT</span><span class="cost">$600 – $900</span></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Countertops</div>
+      <div style="color:var(--gold);font-size:13px;font-weight:600;">$7,400 – $11,100</div>
+    </div>
+    <div class="line-item"><span class="desc">Quartz countertop — perimeter</span><span class="qty">38 SF</span><span class="cost">$3,800 – $5,700</span></div>
+    <div class="line-item"><span class="desc">Waterfall edge island countertop</span><span class="qty">24 SF</span><span class="cost">$3,600 – $5,400</span></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Electrical</div>
+      <div style="color:var(--gold);font-size:13px;font-weight:600;">$4,200 – $6,300</div>
+    </div>
+    <div class="line-item"><span class="desc">Recessed can lights (6")</span><span class="qty">8 EA</span><span class="cost">$1,600 – $2,400</span></div>
+    <div class="line-item"><span class="desc">Under-cabinet LED lighting</span><span class="qty">22 LF</span><span class="cost">$880 – $1,320</span></div>
+    <div class="line-item"><span class="desc">Pendant lights above island</span><span class="qty">3 EA</span><span class="cost">$900 – $1,350</span></div>
+    <div class="line-item"><span class="desc">Outlets & switch relocation</span><span class="qty">6 EA</span><span class="cost">$820 – $1,230</span></div>
+  </div>
+
+  <div class="card" style="font-size:13px;color:var(--stone-light);">
+    <em>+ Plumbing, Flooring, Tile, Paint, Appliances, Structural, GC sections...</em>
+  </div>
+
+  <!-- Totals -->
+  <div class="card-copper">
+    <div class="total-row" style="border-bottom:1px solid rgba(184,115,51,0.2);padding-bottom:8px;margin-bottom:8px;">
+      <span class="label">Subtotal</span>
+      <span class="amount">$52,400 – $78,600</span>
+    </div>
+    <div class="total-row" style="font-size:13px;font-weight:400;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px;margin-bottom:8px;">
+      <span class="label" style="color:var(--cream-dk);">General Conditions</span>
+      <span class="amount" style="color:var(--cream-dk);">$6,800 – $10,200</span>
+    </div>
+    <div class="total-row" style="font-size:13px;font-weight:400;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px;margin-bottom:8px;">
+      <span class="label" style="color:var(--cream-dk);">Margin (20%)</span>
+      <span class="amount" style="color:var(--cream-dk);">$11,840 – $17,760</span>
+    </div>
+    <div class="total-row" style="font-size:18px;">
+      <span class="label">Total Range</span>
+      <span class="amount">$71,040 – $106,560</span>
+    </div>
+  </div>
+
+  <button class="btn-primary" onclick="showPage(4)">Next: Review →</button>
+  <button class="btn-secondary" onclick="showPage(2)">← Back to Concept</button>
+</div>
+
+<!-- ═══════════════ PAGE 5: REVIEW ═══════════════ -->
+<div class="page" id="page-4">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Review & Export</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <!-- Summary card -->
+  <div class="card-copper" style="text-align:center;">
+    <div style="font-size:12px;color:var(--stone-light);margin-bottom:4px;">Conceptual Budget Range</div>
+    <div style="font-size:22px;font-weight:700;color:var(--gold);">$71,040 – $106,560</div>
+    <div style="font-size:12px;color:var(--stone-light);margin-top:4px;">Kitchen Remodel · 280 SF · $254 – $381 /SF</div>
+  </div>
+
+  <!-- Concept images in review -->
+  <div class="card">
+    <div class="section-title">Approved Concept Images</div>
+    <div class="concept-pair">
+      <div class="concept-img concept-after" style="aspect-ratio:16/10;font-size:11px;">✨ Kitchen with<br/>white shaker cabinets<br/>& quartz counters</div>
+      <div class="concept-img concept-after" style="aspect-ratio:16/10;font-size:11px;">✨ Open floor plan<br/>with waterfall<br/>quartz island</div>
+    </div>
+  </div>
+
+  <!-- SOW Preview -->
+  <div class="card">
+    <div class="section-title">Scope of Work Summary</div>
+    <div style="font-size:13px;color:var(--cream-dk);line-height:1.7;">
+      <p style="margin-bottom:8px;">Complete kitchen remodel including removal of load-bearing wall between kitchen and living room with engineered beam, new white shaker cabinetry throughout, quartz countertops with waterfall edge island, subway tile backsplash, LVP flooring, full electrical upgrade with recessed and pendant lighting, and stainless steel appliance package.</p>
+      <p style="margin-bottom:8px;"><strong style="color:var(--copper);">Timeline:</strong> 8–10 weeks</p>
+    </div>
+  </div>
+
+  <!-- Export buttons -->
+  <div class="card">
+    <div class="section-title">Export & Share</div>
+    <button class="btn-success" style="font-size:13px;">📊 Export Excel Estimate</button>
+    <button class="btn-success" style="font-size:13px;">📄 Generate Proposal (Word)</button>
+    <button class="btn-blue" style="font-size:13px;">☁ Sync This Visit to OneDrive</button>
+    <button class="btn-secondary" style="font-size:13px;">🗂 Save Visit to App</button>
+  </div>
+
+  <button class="btn-primary" onclick="showPage(5)">Next: Sign Contract →</button>
+  <button class="btn-secondary" onclick="showPage(3)">← Back to Estimate</button>
+</div>
+
+<!-- ═══════════════ PAGE 6: SIGN ═══════════════ -->
+<div class="page" id="page-5">
+  <div class="app-header">
+    <div class="logo-text">Copper Mountain Builders</div>
+    <div class="page-title">Design-Build Agreement</div>
+  </div>
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+  </div>
+
+  <div class="card-copper" style="text-align:center;">
+    <div style="font-size:11px;letter-spacing:5px;text-transform:uppercase;color:var(--copper);margin-bottom:6px;">Copper Mountain Builders</div>
+    <div style="font-size:20px;font-weight:bold;margin-bottom:4px;">Design-Build Agreement</div>
+    <div style="font-size:12px;color:var(--stone-light);margin-top:4px;">April 13, 2026</div>
+  </div>
+
+  <div class="mockup-note">
+    <strong>Contract only — no estimate numbers.</strong> Clean, professional agreement. Scrollable on mobile. This is your actual Design-Build Agreement template.
+  </div>
+
+  <!-- Contract body (abbreviated) -->
+  <div class="card" style="border-color:rgba(184,115,51,0.4);">
+    <div class="contract-scroll">
+      <p style="color:var(--copper);font-weight:bold;margin-bottom:8px;">Welcome</p>
+      <p style="margin-bottom:8px;">Thank you for choosing <strong style="color:var(--copper);">Copper Mountain Builders</strong> for your home project in the Flathead Valley. This Agreement clearly explains what we will do for you, what you can expect, how we work together, and how we protect both of us.</p>
+
+      <div class="contract-heading">Parties to This Agreement</div>
+      <p><strong>You (the Client):</strong></p>
+      <p style="color:var(--gold);">John & Sarah Thompson</p>
+      <p style="margin-bottom:8px;">123 Lakeside Dr, Whitefish, Montana 59937</p>
+      <p><strong>We (the Contractor):</strong></p>
+      <p>Copper Mountain Builders</p>
+      <p style="margin-bottom:8px;">PO Box 2471, Kalispell, MT 59903</p>
+      <p><strong>Project Address:</strong> 456 Mountain View Rd, Whitefish, Montana 59937</p>
+
+      <div class="contract-heading">1. What We Will Do for You</div>
+      <p style="margin-bottom:8px;">We will provide professional preconstruction design services using our proven 5-Step Design-Build Program...</p>
+
+      <div class="contract-heading">2. Your Investment (Compensation)</div>
+      <p style="margin-bottom:4px;">· Principal / General Management: <strong>$250.00 per hour</strong></p>
+      <p style="margin-bottom:4px;">· Architectural Design Services: <strong>$250.00 per hour</strong></p>
+      <p style="margin-bottom:4px;">· Interior/Exterior Designer: <strong>$150.00 per hour</strong></p>
+      <p style="margin-bottom:8px;"><strong>Initial Non-Refundable Retainer: <span style="color:var(--gold);">$5,000</span></strong></p>
+
+      <div class="contract-heading">3 – 8. (Full contract sections)</div>
+      <p style="color:var(--stone-light);font-style:italic;">Termination · IP Ownership · Promises · Protections · Communication · Legal</p>
+
+      <div class="contract-heading">Exhibit A — 5-Step Design-Build Program</div>
+      <p style="color:var(--stone-light);font-style:italic;">Steps 1–5 detailed...</p>
+
+      <div class="contract-heading">Exhibit B — Insurance & Montana Disclosures</div>
+      <p style="color:var(--stone-light);font-style:italic;">Insurance, warranty, disclosures...</p>
+    </div>
+  </div>
+
+  <!-- Signatures -->
+  <div class="card-copper">
+    <div class="section-title" style="font-size:12px;">In Witness Whereof</div>
+    <p style="font-size:13px;color:var(--cream-dk);margin-bottom:16px;">We both agree to the terms above.</p>
+
+    <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">You (Client): John & Sarah Thompson</p>
+    <div class="sig-box">Tap to sign</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="field"><label class="field-label">Print Name</label><input value="John Thompson" readonly/></div>
+      <div class="field"><label class="field-label">Date</label><input value="4/13/2026" readonly style="opacity:0.7;"/></div>
+    </div>
+
+    <hr class="divider"/>
+
+    <p style="color:var(--copper);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">We (Copper Mountain Builders)</p>
+    <div class="sig-box">Tap to sign</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field"><label class="field-label">Printed Name & Title</label><input value="Matt Farrier" readonly/></div>
+      <div class="field"><label class="field-label">Date</label><input value="4/13/2026" readonly style="opacity:0.7;"/></div>
+    </div>
+  </div>
+
+  <!-- Conceptual Budget Summary — below signatures, high level only -->
+  <div class="card" style="border: 1px solid rgba(184,115,51,0.25); margin-top:4px;">
+    <div class="section-title">Conceptual Budget Summary</div>
+    <p style="font-size:12px;color:var(--stone-light);margin-bottom:14px;line-height:1.5;">The following is a preliminary conceptual budget range based on our initial site evaluation. Final pricing will be determined after completion of Steps 1–4.</p>
+
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Demolition & Site Prep</span>
+      <span style="color:var(--gold);font-weight:500;">$3,840 – $5,760</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Structural</span>
+      <span style="color:var(--gold);font-weight:500;">$5,760 – $8,640</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Cabinetry & Countertops</span>
+      <span style="color:var(--gold);font-weight:500;">$24,000 – $36,000</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Electrical</span>
+      <span style="color:var(--gold);font-weight:500;">$5,040 – $7,560</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Plumbing</span>
+      <span style="color:var(--gold);font-weight:500;">$4,560 – $6,840</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Flooring, Tile & Paint</span>
+      <span style="color:var(--gold);font-weight:500;">$10,080 – $15,120</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">
+      <span style="color:var(--cream-dk);">Appliances</span>
+      <span style="color:var(--gold);font-weight:500;">$9,600 – $14,400</span>
+    </div>
+
+    <hr class="divider" style="margin:12px 0;"/>
+
+    <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
+      <span style="color:var(--cream-dk);">General Conditions</span>
+      <span style="color:var(--cream-dk);">$8,160 – $12,240</span>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;padding:14px 0 4px;font-size:17px;font-weight:700;border-top:2px solid rgba(184,115,51,0.3);margin-top:8px;">
+      <span style="color:var(--cream);">Conceptual Budget Range</span>
+      <span style="color:var(--gold);">$71,040 – $106,560</span>
+    </div>
+
+    <p style="font-size:11px;color:var(--stone-light);font-style:italic;margin-top:10px;line-height:1.5;">*This is a conceptual estimate only and does not constitute a binding bid. Final scope, specifications, and pricing will be determined through the Design-Build process outlined in this Agreement.</p>
+  </div>
+
+  <div style="margin-top:4px; padding:10px; text-align:center;">
+    <p style="font-size:11px;color:var(--stone-light);">Initial Non-Refundable Retainer</p>
+    <p style="font-size:20px;font-weight:700;color:var(--gold);margin:4px 0;">$5,000</p>
+    <p style="font-size:11px;color:var(--stone-light);">Due upon execution of this Agreement</p>
+  </div>
+
+  <!-- Action buttons -->
+  <button class="btn-primary">🖨 Print Signed Agreement</button>
+  <button class="btn-success">📄 Download Signed Contract</button>
+  <button class="btn-blue">☁ Save & Sync to OneDrive</button>
+  <button class="btn-secondary" onclick="showPage(4)">← Back to Review</button>
+</div>
+
+</div><!-- /page-container -->
+
+<script>
+function showPage(n){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+n).classList.add('active');
+  document.querySelectorAll('.nav button').forEach((b,i) => {
+    b.classList.toggle('active', i===n);
+  });
+  window.scrollTo(0,0);
+}
+</script>
+
+</body>
+</html>
