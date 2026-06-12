@@ -143,7 +143,7 @@ function computeEstimateFromTakeoff(takeoffData, marginPercent){
   const gcTotalLow  = gc.reduce((s,i) => s + i.lineTotalLow, 0);
   const gcTotalHigh = gc.reduce((s,i) => s + i.lineTotalHigh, 0);
 
-  const pct = marginPercent || 20;
+  const pct = marginPercent || 28;
   const preLow  = subtotalLow + gcTotalLow;
   const preHigh = subtotalHigh + gcTotalHigh;
 
@@ -170,7 +170,7 @@ function computeGC(subtotalLow, subtotalHigh, months){
     { description:"Temporary facilities",       qty:months,                    unit:"MO", lowPer:800,   highPer:1200 },
     { description:"Builder's risk insurance",   qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.008), highPer: Math.round(subtotalHigh*0.012) },
     { description:"Final clean",                qty:1,                         unit:"LS", lowPer:2000,  highPer:4000 },
-    { description:"Contingency (5%)",           qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.05), highPer: Math.round(subtotalHigh*0.05) }
+    { description:"Contingency (10%)",          qty:1,                         unit:"LS", lowPer: Math.round(subtotalLow*0.10), highPer: Math.round(subtotalHigh*0.10) }
   ];
   return template.map(t => ({
     description: t.description, qty: t.qty, unit: t.unit,
@@ -215,6 +215,117 @@ function sanityCheckPerSF(totalLow, totalHigh, projectType, sqft){
   if(perSfLow < bench.low * 0.8) warnings.push(`LOW ($${Math.round(perSfLow)}/SF) below typical ${projectType} range ($${bench.low}-$${bench.high}/SF)`);
   if(totalHigh/sqft > bench.high * 1.3) warnings.push(`HIGH ($${Math.round(totalHigh/sqft)}/SF) above typical range`);
   return warnings;
+}
+
+// ── Trade-level minimum per-SF benchmarks (Flathead Valley 2026) ──
+// If a trade section's HIGH total / sqft falls below the minimum, we scale it up.
+// This stops the AI from producing $0.03/SF insulation lines silently.
+const TRADE_MIN_PER_SF = {
+  // Trade name (lowercase keyword) → minimum $/SF on residential
+  "drywall":      2.50,
+  "paint":        2.00,
+  "painting":     2.00,
+  "insulation":   1.20,
+  "flooring":     5.00,
+  "tile":         10.00,
+  "electrical":   8.00,    // residential rough + finish combined
+  "framing":      6.00,    // walls + floor framing per SF of conditioned area
+  "siding":       10.00,
+  "roofing":      6.00,
+  "interior finishes": 4.00
+};
+
+// Trade name aliases that map to canonical UNIT_COST_DB entries
+const TRADE_TO_DB_KEY = {
+  "drywall": "Drywall hang/tape/texture",
+  "paint": "Interior painting",
+  "painting": "Interior painting",
+  "insulation": "Batt insulation",
+  "framing": "Wall framing 2x6",
+  "siding": "LP SmartSide siding"
+};
+
+// Clamp a single line item's unit cost to the UNIT_COST_DB range if a fuzzy match exists.
+// Returns true if the unit cost was changed.
+function clampUnitCostToDB(item, sectionName){
+  if(!item || !item.description) return false;
+  const desc = String(item.description).toLowerCase();
+  // Find the best matching DB key by fuzzy substring match
+  let bestKey = null;
+  let bestScore = 0;
+  for(const key of Object.keys(UNIT_COST_DB)){
+    const kl = key.toLowerCase();
+    // Split key into words; score = number of meaningful words present in desc
+    const words = kl.split(/[\s,()/-]+/).filter(w => w.length > 3);
+    let score = 0;
+    for(const w of words){
+      if(desc.includes(w)) score++;
+    }
+    if(score > bestScore){ bestScore = score; bestKey = key; }
+  }
+  // Fall back: try matching by section name first word
+  if(!bestKey && sectionName){
+    const sn = sectionName.toLowerCase().split(/\s+/)[0];
+    const aliasKey = TRADE_TO_DB_KEY[sn];
+    if(aliasKey && UNIT_COST_DB[aliasKey]) bestKey = aliasKey;
+  }
+  if(!bestKey) return false;
+  const db = UNIT_COST_DB[bestKey];
+  // Only clamp if units match (don't clamp $/SF item to a $/EA range)
+  const itemUnit = String(item.unit||"").toUpperCase();
+  if(db.unit !== itemUnit) return false;
+  let changed = false;
+  if(item.unitCostLow == null || item.unitCostLow < db.low * 0.5){
+    item.unitCostLow = db.low;
+    changed = true;
+  }
+  if(item.unitCostHigh == null || item.unitCostHigh < db.low * 0.5){
+    item.unitCostHigh = db.high;
+    changed = true;
+  }
+  if(item.unitCostLow > item.unitCostHigh){
+    item.unitCostLow = db.low;
+    item.unitCostHigh = db.high;
+    changed = true;
+  }
+  return changed;
+}
+
+// Repair the takeoff: clamp each item's unit cost into the DB range, then enforce
+// per-trade minimum $/SF totals. Returns a list of strings describing what was changed.
+function repairTakeoff(takeoff, projectType, sqft){
+  const changes = [];
+  if(!Array.isArray(takeoff)) return changes;
+  for(const trade of takeoff){
+    if(!trade || !Array.isArray(trade.items)) continue;
+    let tradeChanged = 0;
+    for(const item of trade.items){
+      if(clampUnitCostToDB(item, trade.trade)) tradeChanged++;
+    }
+    if(tradeChanged) changes.push(`${trade.trade}: clamped ${tradeChanged} item(s) to UNIT_COST_DB`);
+
+    // Per-trade minimum $/SF check
+    if(sqft && sqft > 0){
+      const tradeKey = String(trade.trade||"").toLowerCase();
+      let minPerSF = 0;
+      for(const k of Object.keys(TRADE_MIN_PER_SF)){
+        if(tradeKey.includes(k)){ minPerSF = TRADE_MIN_PER_SF[k]; break; }
+      }
+      if(minPerSF > 0){
+        const sectionHigh = trade.items.reduce((s,i) => s + (Number(i.qty)||0)*(Number(i.unitCostHigh)||0), 0);
+        const perSF = sectionHigh / sqft;
+        if(perSF < minPerSF){
+          const scaleFactor = minPerSF / Math.max(perSF, 0.01);
+          for(const item of trade.items){
+            item.unitCostLow = Math.round((Number(item.unitCostLow)||0) * scaleFactor * 100) / 100;
+            item.unitCostHigh = Math.round((Number(item.unitCostHigh)||0) * scaleFactor * 100) / 100;
+          }
+          changes.push(`${trade.trade}: $${perSF.toFixed(2)}/SF was below $${minPerSF}/SF minimum — scaled ${scaleFactor.toFixed(2)}x`);
+        }
+      }
+    }
+  }
+  return changes;
 }
 
 let currentStep = 0;
@@ -1366,10 +1477,10 @@ async function ensureLineItemsForExport(est, onStatus){
 TARGET BUILDER COST TOTAL: $${highTotal.toLocaleString()} — Quantity × Unit Cost across all items must sum to this number.
 
 ALL UNIT COSTS ARE BUILDER COST (BARE COST) — what CMB actually pays:
-- For Subcontractor rows: the price CMB pays the sub (their installed quote — which already includes the sub's own profit, but NOT CMB's 20% margin).
+- For Subcontractor rows: the price CMB pays the sub (their installed quote — which already includes the sub's own profit, but NOT CMB's markup).
 - For Labor rows: CMB's billing rate × hours ($85 Carpenter, $100 Foreman, $130 PM).
 - For Material rows: material-only cost CMB pays the supplier.
-- DO NOT add CMB's 20% margin into the Unit Cost. The Excel writer adds it in a separate Markup column.
+- DO NOT add CMB's markup into the Unit Cost. The Excel writer adds it in a separate Markup column.
 
 CSI DIVISION: ${sectionDiv.name}
 SELF-PERFORM: ${sectionIsSelfPerform ? "YES — split each item into Labor + Material rows" : "NO — use single Subcontractor rows"}
@@ -1523,7 +1634,7 @@ Return ONLY this JSON array:
 
 function buildBTWorkbook(est){
   const wb = XLSX.utils.book_new();
-  const marginPct = appData.marginPercent || 20;
+  const marginPct = appData.marginPercent || 28;
 
   const rows = [];
   (est.sections||[]).forEach(section => {
@@ -2483,7 +2594,7 @@ function startNewVisit(){
     clientPrintName: "", repPrintName: "",
     clarifyingQuestions: [], clarifyingAnswers: {},
     davisBacon: false,
-    marginPercent: 20
+    marginPercent: 28  // Industry-benchmark net profit target (~10% net after typical 12% overhead). See research/estimating_for_profit.md.
   };
   currentStep = 0;
   render();
@@ -3058,14 +3169,25 @@ MONTANA REALITIES:
 - Standing seam standard (8-12 week lead time) | Windows 8-12 weeks | Permit review 4-6 weeks
 - Sub availability: framers 8-12 weeks out | WUI requirements add 10-15% to exterior
 
-RULES:
-1. Use the unit cost reference above. unitCostLow = mid-to-high of range. unitCostHigh = top of range.
-2. Every interior space needs DRYWALL and PAINTING. Never optional.
-3. Read ALL project notes as scope directives. "23 windows" means qty 23. "tile floors throughout" means tile for all floor SF.
-4. unitCostLow/High are ALL-IN installed costs (labor + material + sub markup).
-5. Do NOT compute any totals. No section totals. No grand totals. Quantities and unit costs ONLY.
-6. Every trade that applies must be included.
-7. laborRate: 85 for most items, 100 for foreman tasks, 130 for PM tasks.
+RULES — READ STRICTLY:
+1. **UNIT COST LOOKUP IS MANDATORY**: For every line item, find the closest match in the FLATHEAD VALLEY 2026 UNIT COST REFERENCE above and use values from THAT row. unitCostLow = the low value in the table (or 90% of low). unitCostHigh = the high value in the table (or 110% of high). NEVER go below 50% of the table low — that produces nonsense like $0.03/SF drywall.
+2. **If your item doesn't match anything in the table**, find the most-similar entry by trade and use values within 25% of its range. Add "unmatched" to the notes field.
+3. **unitCostLow/High are ALL-IN INSTALLED COSTS** — these are what CMB pays for fully installed work (labor + material + sub markup, but NOT CMB's own 20-28% margin which the app adds separately).
+4. Every interior space needs DRYWALL and PAINTING. Never optional.
+5. Read ALL project notes as scope directives. "23 windows" means qty 23. "tile floors throughout" means tile for all floor SF.
+6. Do NOT compute any totals. No section totals. No grand totals. Quantities and unit costs ONLY.
+7. Every trade that applies must be included.
+8. laborRate: 85 for most items, 100 for foreman tasks, 130 for PM tasks.
+9. **DO NOT INCLUDE GENERAL CONDITIONS ITEMS** (permits, structural engineering, superintendent, dumpsters, temporary facilities, builder's risk insurance, final clean, contingency) — these are added by the app's computeGC() automatically. Including them in your takeoff causes double-counting.
+10. **For REMODELS of existing homes** (Residential Remodel, Kitchen Remodel, Bath Remodel): do NOT include Septic Design, Well Design, Site Excavation, or Site Clearing unless the project notes explicitly say so. These are new-construction items.
+
+ALLOWANCE FLAGGING — set "isAllowance": true on:
+- ALL appliances (range, fridge, dishwasher, microwave, hood, disposal, washer, dryer, water heater) — clients pick brands during design
+- ALL light fixtures and plumbing fixtures where client selection is TBD
+- Countertop material (until stone/quartz selected)
+- Tile (until pattern/style selected)
+- Flooring (until type/grade selected)
+- Cabinet hardware
 
 RESPOND ONLY WITH VALID JSON. No markdown. No explanation.`;
 
@@ -3198,8 +3320,38 @@ Return ONLY this JSON:
     const warnings = validateTakeoff(takeoffResult.takeoff, z.type, z.sqft);
     if(warnings.length) console.warn("Takeoff warnings:", warnings);
 
+    // REPAIR — clamp unit costs to UNIT_COST_DB range, enforce per-trade min $/SF,
+    // strip duplicate GC items the AI may have included (permits, structural eng, etc.)
+    // The AI consistently hallucinates low unit costs ($0.03/SF insulation, $0.23/SF drywall)
+    // and sometimes duplicates GC scope already auto-generated by computeGC().
+    if(Array.isArray(takeoffResult.takeoff)){
+      // Strip items that overlap with computeGC template — by lowercased description match
+      const GC_OVERLAP_KEYWORDS = [
+        "permit", "structural engineering", "civil engineering",
+        "superintendent", "supervision", "dumpster", "waste removal",
+        "temporary facilities", "builder's risk", "general liability",
+        "final clean", "contingency"
+      ];
+      for(const trade of takeoffResult.takeoff){
+        if(!Array.isArray(trade.items)) continue;
+        const before = trade.items.length;
+        trade.items = trade.items.filter(it => {
+          const desc = String(it.description || it.title || "").toLowerCase();
+          return !GC_OVERLAP_KEYWORDS.some(kw => desc.includes(kw));
+        });
+        if(trade.items.length < before){
+          console.warn(`Stripped ${before - trade.items.length} GC-overlap items from ${trade.trade}`);
+        }
+      }
+    }
+    const repairs = repairTakeoff(takeoffResult.takeoff, z.type, Number(z.sqft) || 0);
+    if(repairs.length){
+      console.warn("Takeoff repairs applied:");
+      for(const r of repairs) console.warn("  " + r);
+    }
+
     // APP DOES ALL THE MATH
-    const computed = computeEstimateFromTakeoff(takeoffResult, appData.marginPercent || 20);
+    const computed = computeEstimateFromTakeoff(takeoffResult, appData.marginPercent || 28);
 
     // Sanity check
     if(z.sqft){
@@ -3926,7 +4078,7 @@ function renderSign(){
       <p style="font-size:12px;color:var(--stone-light);margin-bottom:14px;line-height:1.5;">The following is a preliminary conceptual budget range based on our initial site evaluation. Final pricing will be determined after completion of Steps 1–4.</p>
       ${(()=>{
         const est = appData.estimate;
-        const m = 1 + (appData.marginPercent||20)/100;
+        const m = 1 + (appData.marginPercent||28)/100;
         const sections = est.sections || est.zones || [];
         return sections.map(s => {
           const sLow = Math.round((s.low||0) * m);
@@ -3936,7 +4088,7 @@ function renderSign(){
       })()}
       ${(()=>{
         const est = appData.estimate;
-        const m = 1 + (appData.marginPercent||20)/100;
+        const m = 1 + (appData.marginPercent||28)/100;
         if(est.gcLow){
           return '<div style="margin-top:8px;display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span style="color:var(--cream-dk);">General Conditions</span><span style="color:var(--cream-dk);">'+fmt$(Math.round(est.gcLow*m))+' – '+fmt$(Math.round(est.gcHigh*m))+'</span></div>';
         }
